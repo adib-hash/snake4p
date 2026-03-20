@@ -1,5 +1,15 @@
 # Changelog — Snake × 4
 
+## v1.6.0 — 2026-03-20
+
+### Back button on waiting room
+Added a "Back" button to the multiplayer waiting room. Returns to the lobby and cleans up the Supabase channel. Works for both host and joined players.
+
+### Quit button after game over
+Added a "Quit" button that appears on the game-over screen for all players (alongside the host's "Play Again" button). Returns to the lobby and fully resets session state.
+
+---
+
 ## v1.5.0 — 2026-03-20
 
 ### Single-player: D-pad controls

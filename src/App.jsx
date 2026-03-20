@@ -442,7 +442,7 @@ function LobbyScreen({ onSingle, onHost, onJoin }) {
 }
 
 // ── WAITING ROOM ────────────────────────────────────────────────────
-function WaitingRoom({ roomCode, players, mySlot, isHost, wallMode, onStart }) {
+function WaitingRoom({ roomCode, players, mySlot, isHost, wallMode, onStart, onBack }) {
   const ready = players.filter(Boolean).length;
 
   return (
@@ -572,6 +572,13 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, wallMode, onStart }) {
           Waiting for host to start...
         </div>
       )}
+
+      <button
+        onClick={onBack}
+        style={styles.btnSecondary}
+      >
+        Back
+      </button>
     </div>
   );
 }
@@ -1001,6 +1008,33 @@ export default function App() {
     }
   }, [gameState.gameOver, gameState.score]);
 
+  // ── Go home (back / quit) ──
+  function handleGoHome() {
+    audioEngine.stop();
+    if (tickRef.current) clearTimeout(tickRef.current);
+    if (retryRef.current) clearInterval(retryRef.current);
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    // Reset all session state
+    setScreen("lobby");
+    setRoomCode("");
+    setMySlot(-1);
+    mySlotRef.current = -1;
+    setIsHost(false);
+    isHostRef.current = false;
+    setIsSinglePlayer(false);
+    isSinglePlayerRef.current = false;
+    setPlayers([null, null, null, null]);
+    playersRef.current = [null, null, null, null];
+    nextDirRef.current = null;
+    speedRef.current = TICK_MS;
+    const fresh = initGame();
+    gameRef.current = fresh;
+    setGameState(fresh);
+  }
+
   // ── Cleanup ──
   useEffect(() => {
     return () => {
@@ -1028,6 +1062,7 @@ export default function App() {
         isHost={isHost}
         wallMode={wallMode}
         onStart={handleStart}
+        onBack={handleGoHome}
       />
     );
   }
@@ -1255,6 +1290,14 @@ export default function App() {
           Waiting for host to restart...
         </div>
       )}
+      {gameState.gameOver && (
+        <button
+          onClick={handleGoHome}
+          style={{ ...styles.btnSecondary, marginTop: 4 }}
+        >
+          Quit
+        </button>
+      )}
     </div>
   );
 }
@@ -1303,6 +1346,19 @@ const styles = {
     color: "#0a0a0f",
     fontSize: 16,
     fontWeight: 700,
+    fontFamily: "'JetBrains Mono', monospace",
+    cursor: "pointer",
+  },
+  btnSecondary: {
+    width: "100%",
+    maxWidth: 300,
+    padding: "12px 24px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "transparent",
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 14,
+    fontWeight: 600,
     fontFamily: "'JetBrains Mono', monospace",
     cursor: "pointer",
   },
