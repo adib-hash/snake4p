@@ -6,8 +6,8 @@ const GRID = 20;
 const TICK_MS = 150;
 
 // ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS HERE ▼▼▼
-const SUPABASE_URL = "https://mohudogfrkucjevydtko.supabase.co";
-const SUPABASE_KEY = "PASTE_YOUR_LEGACY_ANON_KEY_HERE";
+const SUPABASE_URL = "https://fipnujvxhcqsgxqqxrxn.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpcG51anZ4aGNxc2d4cXF4cnhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NzcxOTMsImV4cCI6MjA4OTU1MzE5M30.mWq9dv2tV8yBgzJmXdkzb0RAHK2BCNjND8cdmGRaxwI";
 // ▲▲▲ Go to Supabase → Project Settings → API → Legacy anon key ▲▲▲
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
