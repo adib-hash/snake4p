@@ -1,5 +1,21 @@
 # Changelog — Snake × 4
 
+## v1.9.1 — 2026-03-20
+
+### Fix: joiner stuck as spectator with "?" button
+
+A joining player could reach the game screen with `mySlot === -1` (no direction assigned), rendering a non-functional `?` button instead of their directional control. This was distinct from the v1.9.0 fix (which addressed Unicode arrow rendering) — it was a slot assignment failure.
+
+Three gaps fixed:
+
+1. **Channel reconnect leaks retry interval** — when the Supabase channel dropped and resubscribed, the subscribe callback created a new `setInterval` without clearing the old one. Fixed: old interval is now cleared before creating a new one. Also, the slot request is now skipped entirely if the slot is already confirmed, preventing redundant re-requests on reconnect.
+
+2. **`game_start` fires with no slot** — if a player joined but hadn't yet received `slot_assigned` when the host started the game, they would transition to the game screen with `mySlot === -1` and never recover. Fixed: `game_start` handler now immediately sends `request_slot` if `mySlot` is still `-1`.
+
+3. **Tab-return handler doesn't re-request slot** — the non-host visibility handler already resubscribed the channel and requested fresh game state on tab return, but did not re-request the slot if it was missing. Fixed: `request_slot` is now also sent on tab return if `mySlotRef.current === -1`.
+
+---
+
 ## v1.9.0 — 2026-03-20
 
 ### Fix: false game-over from rapid direction inputs

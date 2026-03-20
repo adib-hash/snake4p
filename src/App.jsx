@@ -786,6 +786,14 @@ export default function App() {
       setGameState(fresh);
       setScreen("game");
       audioEngine.start();
+      // If we never received a slot assignment, request one now
+      if (mySlotRef.current === -1) {
+        channel.send({
+          type: "broadcast",
+          event: "request_slot",
+          payload: { playerId: myIdRef.current },
+        });
+      }
     });
 
     // ── Listen: restart ──
@@ -890,11 +898,15 @@ export default function App() {
           });
         };
 
-        sendRequest();
-        retryRef.current = setInterval(() => {
-          console.log("[snake] retrying slot request...");
+        // Only request a slot if not yet assigned (handles reconnect case)
+        if (mySlotRef.current === -1) {
           sendRequest();
-        }, 2000);
+          if (retryRef.current) clearInterval(retryRef.current);
+          retryRef.current = setInterval(() => {
+            console.log("[snake] retrying slot request...");
+            sendRequest();
+          }, 2000);
+        }
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
         setConnectionStatus("reconnecting");
         setTimeout(() => channelRef.current?.subscribe(), 2000);
@@ -1109,6 +1121,14 @@ export default function App() {
           event: "request_game_state",
           payload: {},
         });
+        // If we still don't have a slot, re-request it
+        if (mySlotRef.current === -1) {
+          channelRef.current.send({
+            type: "broadcast",
+            event: "request_slot",
+            payload: { playerId: myIdRef.current },
+          });
+        }
       }
     };
     document.addEventListener("visibilitychange", onVisible);
