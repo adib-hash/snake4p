@@ -1,5 +1,23 @@
 # Changelog — Snake × 4
 
+## v1.7.0 — 2026-03-20
+
+### Multiplayer stability & iOS hang fix
+
+**Direction input queue** — replaced the single-slot `nextDirRef` with a capped queue (max 3 inputs). Previously, a direction input arriving at the exact moment the tick consumed it could be silently dropped. The queue drains one input per tick, so fast taps are reliably registered.
+
+**Tick deduplication + drift correction** — the game loop body was copy-pasted in two places (`useEffect` and `handleRestart`). Extracted into a shared `startTick()` function. Also added drift correction: the actual time spent per tick is subtracted from the next delay, preventing cumulative timing drift over long sessions.
+
+**Visibility pause/resume (iOS hang fix)** — on iOS, app-switching or backgrounding caused `setTimeout` to keep ticking while the canvas froze (RAF stalled), producing a "jump" when focus returned. The host now stops the tick loop when the tab is hidden and restarts cleanly when it comes back into view. Handles both `visibilitychange` and `pagehide`/`pageshow` events.
+
+**Channel reconnect banner** — if the Supabase channel errors, times out, or closes, a red "RECONNECTING..." banner appears at the top of the screen and the channel automatically resubscribes after 2 seconds. Non-host players also resubscribe if their channel is found closed on tab return.
+
+**AudioContext recovery** — added a `statechange` listener to resume the AudioContext if iOS suspends it mid-game. The audio `_tick()` scheduler also clamps `_next` to prevent a burst of queued steps firing all at once after a suspend/resume.
+
+**Supabase worker heartbeat** — added `worker: true` to the channel config, which runs the Supabase heartbeat in a Web Worker. Reduces the risk of iOS background throttling killing the channel connection.
+
+---
+
 ## v1.6.0 — 2026-03-20
 
 ### Back button on waiting room

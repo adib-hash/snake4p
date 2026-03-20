@@ -41,6 +41,9 @@ class LoFiEngine {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
+    this.ctx.onstatechange = () => {
+      if (this.ctx.state === "suspended" && this.running) this.ctx.resume();
+    };
   }
 
   start() {
@@ -61,6 +64,10 @@ class LoFiEngine {
 
   _tick() {
     if (!this.running) return;
+    // Clamp _next to avoid burst playback after a suspend/resume freeze
+    if (this._next < this.ctx.currentTime - 0.1) {
+      this._next = this.ctx.currentTime + 0.05;
+    }
     while (this._next < this.ctx.currentTime + 0.1) {
       this._step16(this._step, this._next);
       this._step = (this._step + 1) % 16;
@@ -594,6 +601,7 @@ export default function App() {
   const [flashDir, setFlashDir] = useState(null);
 
   const [muted, setMuted] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("ok");
   const [wallMode, setWallMode] = useState("finite");
   const [isSinglePlayer, setIsSinglePlayer] = useState(false);
   const isSinglePlayerRef = useRef(false);
@@ -603,7 +611,8 @@ export default function App() {
 
   const channelRef = useRef(null);
   const gameRef = useRef(initGame());
-  const nextDirRef = useRef(null);
+  const dirQueueRef = useRef([]);   // queues direction inputs (max 3); replaces single-slot nextDirRef
+  const pausedAtRef = useRef(null); // tracks when page was hidden (for debugging)
   const playersRef = useRef([null, null, null, null]);
   const myIdRef = useRef(Math.random().toString(36).slice(2, 8));
   const tickRef = useRef(null);
@@ -642,6 +651,7 @@ export default function App() {
   function joinChannel(code) {
     const channel = supabase.channel(`snake-${code}`, {
       config: { broadcast: { self: true } },
+      worker: true,  // Run heartbeat in Web Worker — reduces iOS background throttling
     });
 
     // ── Listen: slot requests (host handles) ──
@@ -726,7 +736,7 @@ export default function App() {
       const { dir } = payload;
       const cur = gameRef.current.direction;
       if (dir && OPPOSITES[dir] !== cur) {
-        nextDirRef.current = dir;
+        if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
     });
 
@@ -746,7 +756,7 @@ export default function App() {
       setWallMode(wm);
       const fresh = initGame();
       gameRef.current = fresh;
-      nextDirRef.current = null;
+      dirQueueRef.current = [];
       setGameState(fresh);
       setScreen("game");
       audioEngine.start();
@@ -759,7 +769,7 @@ export default function App() {
       setWallMode(wm);
       const fresh = initGame();
       gameRef.current = fresh;
-      nextDirRef.current = null;
+      dirQueueRef.current = [];
       setGameState(fresh);
       audioEngine.start();
     });
@@ -784,7 +794,7 @@ export default function App() {
     speedRef.current = TICK_MS;
     const fresh = initGame();
     gameRef.current = fresh;
-    nextDirRef.current = null;
+    dirQueueRef.current = [];
     setGameState(fresh);
     audioEngine.start();
     setScreen("game");
@@ -811,6 +821,11 @@ export default function App() {
     channelRef.current = ch;
     ch.subscribe((status) => {
       console.log("[snake] host channel status:", status);
+      if (status === "SUBSCRIBED") setConnectionStatus("ok");
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setConnectionStatus("reconnecting");
+        setTimeout(() => channelRef.current?.subscribe(), 2000);
+      }
     });
 
     console.log("[snake] hosting room", code, "myId:", myIdRef.current);
@@ -830,6 +845,7 @@ export default function App() {
     // Once subscribed, request a slot. Retry every 2s until acknowledged.
     ch.subscribe((status) => {
       if (status === "SUBSCRIBED") {
+        setConnectionStatus("ok");
         console.log(
           "[snake] subscribed, requesting slot. myId:",
           myIdRef.current
@@ -853,6 +869,9 @@ export default function App() {
           console.log("[snake] retrying slot request...");
           sendRequest();
         }, 2000);
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        setConnectionStatus("reconnecting");
+        setTimeout(() => channelRef.current?.subscribe(), 2000);
       }
     });
   }
@@ -861,7 +880,7 @@ export default function App() {
   function handleStart() {
     const fresh = initGame();
     gameRef.current = fresh;
-    nextDirRef.current = null;
+    dirQueueRef.current = [];
     speedRef.current = TICK_MS;
     setGameState(fresh);
     setScreen("game");
@@ -873,40 +892,37 @@ export default function App() {
     });
   }
 
-  // ── Host game loop ──
-  useEffect(() => {
-    if (screen !== "game" || !isHost) return;
+  // ── Shared tick starter (extracted to eliminate duplication + add drift correction) ──
+  function startTick() {
+    if (tickRef.current) clearTimeout(tickRef.current);
     const ch = channelRef.current;
     const wm = wallModeRef.current;
 
     const tick = () => {
+      const tickStart = Date.now();
       const prevScore = gameRef.current.score;
-      const dir = nextDirRef.current || gameRef.current.direction;
-      nextDirRef.current = null;
+      const queued = dirQueueRef.current.length > 0 ? dirQueueRef.current.shift() : null;
+      const dir = queued || gameRef.current.direction;
       const newState = gameTick(gameRef.current, dir, wm);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch?.send({
-        type: "broadcast",
-        event: "game_state",
-        payload: { state: newState },
-      });
-
-      if (newState.gameOver) {
-        audioEngine.stop();
-        return;
-      }
-
-      // Speed up slightly each time food is eaten (floor at 75ms)
+      ch?.send({ type: "broadcast", event: "game_state", payload: { state: newState } });
+      if (newState.gameOver) { audioEngine.stop(); return; }
       if (newState.score > prevScore) {
-        // No speed change on first 2 foods; then -10ms per food, floor 80ms
         speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 10);
       }
-
-      tickRef.current = setTimeout(tick, speedRef.current);
+      // Drift correction: subtract actual execution time from next delay
+      const elapsed = Date.now() - tickStart;
+      tickRef.current = setTimeout(tick, Math.max(0, speedRef.current - elapsed));
     };
 
     tickRef.current = setTimeout(tick, speedRef.current);
+  }
+
+  // ── Host game loop ──
+  useEffect(() => {
+    if (screen !== "game" || !isHost) return;
+    startTick();
     return () => clearTimeout(tickRef.current);
   }, [screen, isHost]);
 
@@ -922,7 +938,7 @@ export default function App() {
     if (isHostRef.current) {
       const cur = gameRef.current.direction;
       if (OPPOSITES[dir] !== cur) {
-        nextDirRef.current = dir;
+        if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
     } else {
       channelRef.current?.send({
@@ -937,7 +953,7 @@ export default function App() {
   function handleRestart() {
     const fresh = initGame();
     gameRef.current = fresh;
-    nextDirRef.current = null;
+    dirQueueRef.current = [];
     speedRef.current = TICK_MS;
     setGameState(fresh);
     audioEngine.start();
@@ -946,35 +962,7 @@ export default function App() {
       event: "game_restart",
       payload: { wallMode: wallModeRef.current },
     });
-
-    if (tickRef.current) clearTimeout(tickRef.current);
-    const ch = channelRef.current;
-    const wm = wallModeRef.current;
-
-    const tick = () => {
-      const prevScore = gameRef.current.score;
-      const dir = nextDirRef.current || gameRef.current.direction;
-      nextDirRef.current = null;
-      const newState = gameTick(gameRef.current, dir, wm);
-      gameRef.current = newState;
-      setGameState({ ...newState });
-      ch?.send({
-        type: "broadcast",
-        event: "game_state",
-        payload: { state: newState },
-      });
-      if (newState.gameOver) {
-        audioEngine.stop();
-        return;
-      }
-      if (newState.score > prevScore) {
-        // No speed change on first 2 foods; then -10ms per food, floor 80ms
-        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 10);
-      }
-      tickRef.current = setTimeout(tick, speedRef.current);
-    };
-
-    tickRef.current = setTimeout(tick, speedRef.current);
+    startTick();
   }
 
   // ── Keyboard ──
@@ -1028,7 +1016,7 @@ export default function App() {
     isSinglePlayerRef.current = false;
     setPlayers([null, null, null, null]);
     playersRef.current = [null, null, null, null];
-    nextDirRef.current = null;
+    dirQueueRef.current = [];
     speedRef.current = TICK_MS;
     const fresh = initGame();
     gameRef.current = fresh;
@@ -1044,6 +1032,57 @@ export default function App() {
       audioEngine.stop();
     };
   }, []);
+
+  // ── AudioContext resume on tab return ──
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && audioEngine.ctx?.state === "suspended") {
+        audioEngine.ctx.resume();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // ── Host: pause tick on hide, resume on show ──
+  useEffect(() => {
+    if (screen !== "game" || !isHost) return;
+    const onHide = () => {
+      if (document.hidden) {
+        clearTimeout(tickRef.current);
+        tickRef.current = null;
+        pausedAtRef.current = Date.now();
+      } else {
+        pausedAtRef.current = null;
+        if (!gameRef.current.gameOver && tickRef.current === null) startTick();
+      }
+    };
+    const onPageHide = () => { clearTimeout(tickRef.current); tickRef.current = null; };
+    const onPageShow = () => {
+      if (!gameRef.current.gameOver && tickRef.current === null) startTick();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [screen, isHost]);
+
+  // ── Non-host: resubscribe channel on tab return ──
+  useEffect(() => {
+    if (screen !== "game" || isHost) return;
+    const onVisible = () => {
+      if (!document.hidden && channelRef.current) {
+        const s = channelRef.current.state;
+        if (s === "closed" || s === "errored") channelRef.current.subscribe();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [screen, isHost]);
 
   // ═════════════════════════════════════════════════════════════════
   // RENDER
@@ -1078,6 +1117,16 @@ export default function App() {
 
   return (
     <div style={styles.gameScreen}>
+      {connectionStatus === "reconnecting" && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0,
+          background: "#c0392b", color: "#fff",
+          fontSize: 12, textAlign: "center", padding: "5px 0", zIndex: 999,
+          fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1,
+        }}>
+          RECONNECTING...
+        </div>
+      )}
       <div
         style={{
           display: "flex",
