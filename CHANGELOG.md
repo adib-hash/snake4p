@@ -1,5 +1,21 @@
 # Changelog — Snake × 4
 
+## v1.8.0 — 2026-03-20
+
+### Latency & reliability improvements
+
+**Tick rate 250ms → 200ms** — reduces worst-case input latency for non-host players by ~50ms (from 350ms to 300ms worst case; 225ms → 175ms average). Speed curve adjusted to maintain the same difficulty ramp.
+
+**Dynamic channel ref in tick loop** — `channelRef.current` is now read on every tick instead of being captured once at `startTick()` call time. Ensures the most-current channel is always used and future-proofs any reconnect path.
+
+**`request_game_state` resync for non-hosts** — when a non-host player returns from a backgrounded tab, they now immediately broadcast a `request_game_state` event. The host responds with the current game state, eliminating the gap where stale state could persist until the next scheduled tick.
+
+**Waiting room: host slot now labeled "Host"** — slot 0 previously showed "Joined" for other players. Now correctly shows "Host" so the room layout is unambiguous.
+
+**Removed `pausedAtRef` dead code** — was declared and set but never read.
+
+---
+
 ## v1.7.1 — 2026-03-20
 
 ### Fix: multiplayer game freezing on first button tap

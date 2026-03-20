@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────
 const GRID = 20;
-const TICK_MS = 250; // starting tick speed (ms); speeds up as score rises
+const TICK_MS = 200; // starting tick speed (ms); speeds up as score rises
 
 // ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS HERE ▼▼▼
 const SUPABASE_URL = "https://fipnujvxhcqsgxqqxrxn.supabase.co";
@@ -545,7 +545,7 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, wallMode, onStart, onB
                     : "rgba(255,255,255,0.2)",
                 }}
               >
-                {taken ? (isMe ? "You" : "Joined") : "Waiting..."}
+                {taken ? (isMe ? "You" : (i === 0 ? "Host" : "Joined")) : "Waiting..."}
               </div>
             </div>
           );
@@ -612,7 +612,6 @@ export default function App() {
   const channelRef = useRef(null);
   const gameRef = useRef(initGame());
   const dirQueueRef = useRef([]);   // queues direction inputs (max 3); replaces single-slot nextDirRef
-  const pausedAtRef = useRef(null); // tracks when page was hidden (for debugging)
   const playersRef = useRef([null, null, null, null]);
   const myIdRef = useRef(Math.random().toString(36).slice(2, 8));
   const tickRef = useRef(null);
@@ -748,6 +747,16 @@ export default function App() {
         gameRef.current = payload.state;
         setGameState(payload.state);
       }
+    });
+
+    // ── Listen: state resync request (host responds) ──
+    channel.on("broadcast", { event: "request_game_state" }, () => {
+      if (!isHostRef.current) return;
+      channel.send({
+        type: "broadcast",
+        event: "game_state",
+        payload: { state: gameRef.current },
+      });
     });
 
     // ── Listen: game start ──
@@ -896,7 +905,6 @@ export default function App() {
   // ── Shared tick starter (extracted to eliminate duplication + add drift correction) ──
   function startTick() {
     if (tickRef.current) clearTimeout(tickRef.current);
-    const ch = channelRef.current;
     const wm = wallModeRef.current;
 
     const tick = () => {
@@ -907,10 +915,10 @@ export default function App() {
       const newState = gameTick(gameRef.current, dir, wm);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch?.send({ type: "broadcast", event: "game_state", payload: { state: newState } });
+      channelRef.current?.send({ type: "broadcast", event: "game_state", payload: { state: newState } });
       if (newState.gameOver) { audioEngine.stop(); return; }
       if (newState.score > prevScore) {
-        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 10);
+        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 8);
       }
       // Drift correction: subtract actual execution time from next delay
       const elapsed = Date.now() - tickStart;
@@ -1052,9 +1060,7 @@ export default function App() {
       if (document.hidden) {
         clearTimeout(tickRef.current);
         tickRef.current = null;
-        pausedAtRef.current = Date.now();
       } else {
-        pausedAtRef.current = null;
         if (!gameRef.current.gameOver && tickRef.current === null) startTick();
       }
     };
@@ -1079,6 +1085,12 @@ export default function App() {
       if (!document.hidden && channelRef.current) {
         const s = channelRef.current.state;
         if (s === "closed" || s === "errored") channelRef.current.subscribe();
+        // Request fresh game state immediately on return
+        channelRef.current.send({
+          type: "broadcast",
+          event: "request_game_state",
+          payload: {},
+        });
       }
     };
     document.addEventListener("visibilitychange", onVisible);
