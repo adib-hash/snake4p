@@ -6,7 +6,7 @@ const TICK_MS = 150;
 
 // ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS HERE ▼▼▼
 const SUPABASE_URL = "https://mohudogfrkucjevydtko.supabase.co";
-const SUPABASE_KEY = "PASTE_YOUR_LEGACY_ANON_KEY_HERE";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRsYWxsdmNyb2dhZHFndHp1b2tvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNzM1MDgsImV4cCI6MjA4Nzc0OTUwOH0.ICE7m-Vk_ltJmMRS5x2OUKep8cB7CfIeg6Mo8_QPkmo";
 // ▲▲▲ Go to Supabase → Project Settings → API → Legacy anon key ▲▲▲
 
 const DIRECTIONS = ["UP", "RIGHT", "DOWN", "LEFT"];
