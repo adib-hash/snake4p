@@ -1,5 +1,22 @@
 # Changelog — Snake × 4
 
+## v1.4.0 — 2026-03-20
+
+### Game mode: Single Player
+New single player mode on the lobby screen — skips the waiting room and jumps straight into the game. No Supabase channel, no room code, instant play.
+
+### Game mode: Multiplayer (existing, now labeled)
+Existing multiplayer flow unchanged — create room, share code, wait for players, start.
+
+### Wall config: Finite vs Infinite
+Host/solo player selects wall mode on the lobby screen before starting:
+- **Finite** — hitting any wall is game over (previous behavior). Wall border glows red-cyan.
+- **Infinite** — snake wraps to the opposite side (classic snake behavior). Wall border shows as a dim dashed line.
+
+In multiplayer, the wall mode is broadcast to all players in `game_start` and `game_restart` payloads, so all clients play the same mode. The waiting room shows a Finite/Infinite badge. Joining players always use the host's config.
+
+---
+
 ## v1.3.0 — 2026-03-20
 
 ### Larger play field

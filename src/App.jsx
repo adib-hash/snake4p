@@ -166,17 +166,21 @@ function initGame() {
   };
 }
 
-function gameTick(state, nextDir) {
+function gameTick(state, nextDir, wallMode = "finite") {
   if (state.gameOver) return state;
   const dir = nextDir || state.direction;
   const [dx, dy] = DIR_VECTORS[dir];
   const [hx, hy] = state.snake[0];
-  const nx = hx + dx;
-  const ny = hy + dy;
+  let nx = hx + dx;
+  let ny = hy + dy;
 
-  // Wall collision
-  if (nx < 0 || nx >= GRID || ny < 0 || ny >= GRID) {
-    return { ...state, gameOver: true, direction: dir };
+  if (wallMode === "finite") {
+    if (nx < 0 || nx >= GRID || ny < 0 || ny >= GRID) {
+      return { ...state, gameOver: true, direction: dir };
+    }
+  } else {
+    nx = (nx + GRID) % GRID;
+    ny = (ny + GRID) % GRID;
   }
 
   // Self collision
@@ -197,7 +201,7 @@ function gameTick(state, nextDir) {
 }
 
 // ── CANVAS RENDERER ─────────────────────────────────────────────────
-function GameBoard({ state, cellSize }) {
+function GameBoard({ state, cellSize, wallMode }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
 
@@ -230,13 +234,22 @@ function GameBoard({ state, cellSize }) {
         ctx.stroke();
       }
 
-      // Wall border
-      ctx.shadowColor = "#4ECDC4";
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = "rgba(78,205,196,0.55)";
-      ctx.lineWidth = 2;
+      // Wall border — glows when finite, dim dashed when infinite
+      if (wallMode === "finite") {
+        ctx.shadowColor = "#4ECDC4";
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = "rgba(78,205,196,0.55)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(78,205,196,0.18)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 6]);
+      }
       ctx.strokeRect(1, 1, size - 2, size - 2);
       ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
 
       const t = Date.now() / 400;
       const glow = 8 + Math.sin(t) * 4;
@@ -301,7 +314,7 @@ function GameBoard({ state, cellSize }) {
       running = false;
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [state, cellSize]);
+  }, [state, cellSize, wallMode]);
 
   return (
     <canvas
@@ -316,68 +329,89 @@ function GameBoard({ state, cellSize }) {
 }
 
 // ── LOBBY SCREEN ────────────────────────────────────────────────────
-function LobbyScreen({ onHost, onJoin }) {
+function LobbyScreen({ onSingle, onHost, onJoin }) {
   const [code, setCode] = useState("");
+  const [mode, setMode] = useState("multi");    // "single" | "multi"
+  const [walls, setWalls] = useState("finite"); // "finite" | "infinite"
+
+  const toggleBase = {
+    flex: 1, padding: "10px 8px", borderRadius: 8, border: "none",
+    fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace",
+    cursor: "pointer", transition: "all 0.15s",
+  };
+  const active = (color) => ({ ...toggleBase, background: color, color: "#0a0a0f" });
+  const inactive = { ...toggleBase, background: "transparent", color: "rgba(255,255,255,0.35)" };
+  const toggleWrap = {
+    display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: 3,
+  };
 
   return (
     <div style={styles.screenCenter}>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 56, marginBottom: 8 }}>🐍</div>
         <h1 style={styles.title}>SNAKE × 4</h1>
-        <p
-          style={{
-            color: "rgba(255,255,255,0.4)",
-            fontSize: 13,
-            marginTop: 8,
-          }}
-        >
-          4 players. 1 snake. 1 button each.
+        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 8 }}>
+          {mode === "single" ? "Solo. One button. Go." : "4 players. 1 snake. 1 button each."}
         </p>
       </div>
 
-      <button onClick={onHost} style={styles.btnPrimary}>
-        Create Room
-      </button>
-
-      <div style={styles.divider}>
-        <div style={styles.dividerLine} />
-        <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>
-          OR
-        </span>
-        <div style={styles.dividerLine} />
+      {/* Game mode */}
+      <div style={{ width: "100%", maxWidth: 300 }}>
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, marginBottom: 8 }}>MODE</div>
+        <div style={toggleWrap}>
+          <button onClick={() => setMode("single")} style={mode === "single" ? active("#4ECDC4") : inactive}>Single Player</button>
+          <button onClick={() => setMode("multi")} style={mode === "multi" ? active("#4ECDC4") : inactive}>Multiplayer</button>
+        </div>
       </div>
 
-      <div
-        style={{ display: "flex", gap: 8, width: "100%", maxWidth: 300 }}
-      >
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="ROOM CODE"
-          maxLength={5}
-          style={styles.input}
-        />
-        <button
-          onClick={() => code.length >= 4 && onJoin(code)}
-          disabled={code.length < 4}
-          style={{
-            ...styles.btnJoin,
-            background:
-              code.length >= 4 ? "#7B68EE" : "rgba(255,255,255,0.05)",
-            color:
-              code.length >= 4 ? "#fff" : "rgba(255,255,255,0.2)",
-            cursor: code.length >= 4 ? "pointer" : "default",
-          }}
-        >
-          Join
-        </button>
+      {/* Wall config — only creator sets this */}
+      <div style={{ width: "100%", maxWidth: 300 }}>
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 2, marginBottom: 8 }}>WALLS</div>
+        <div style={toggleWrap}>
+          <button onClick={() => setWalls("finite")} style={walls === "finite" ? active("#E85D75") : inactive}>Finite</button>
+          <button onClick={() => setWalls("infinite")} style={walls === "infinite" ? active("#7B68EE") : inactive}>Infinite</button>
+        </div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginTop: 6, textAlign: "center" }}>
+          {walls === "finite" ? "Hitting a wall ends the game" : "Snake wraps to the opposite side"}
+        </div>
       </div>
+
+      {mode === "single" ? (
+        <button onClick={() => onSingle(walls)} style={styles.btnPrimary}>Play</button>
+      ) : (
+        <>
+          <button onClick={() => onHost(walls)} style={styles.btnPrimary}>Create Room</button>
+          <div style={styles.divider}>
+            <div style={styles.dividerLine} />
+            <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>OR JOIN</span>
+            <div style={styles.dividerLine} />
+          </div>
+          <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 300 }}>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="ROOM CODE"
+              maxLength={5}
+              style={styles.input}
+            />
+            <button
+              onClick={() => code.length >= 4 && onJoin(code)}
+              disabled={code.length < 4}
+              style={{
+                ...styles.btnJoin,
+                background: code.length >= 4 ? "#7B68EE" : "rgba(255,255,255,0.05)",
+                color: code.length >= 4 ? "#fff" : "rgba(255,255,255,0.2)",
+                cursor: code.length >= 4 ? "pointer" : "default",
+              }}
+            >Join</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 // ── WAITING ROOM ────────────────────────────────────────────────────
-function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
+function WaitingRoom({ roomCode, players, mySlot, isHost, wallMode, onStart }) {
   const ready = players.filter(Boolean).length;
 
   return (
@@ -411,8 +445,19 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
-        Share this code with 3 friends
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+          Share this code with 3 friends
+        </div>
+        <div style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: 1,
+          padding: "3px 8px", borderRadius: 6,
+          background: wallMode === "finite" ? "rgba(232,93,117,0.15)" : "rgba(123,104,238,0.15)",
+          color: wallMode === "finite" ? "#E85D75" : "#7B68EE",
+          border: `1px solid ${wallMode === "finite" ? "rgba(232,93,117,0.3)" : "rgba(123,104,238,0.3)"}`,
+        }}>
+          {wallMode === "finite" ? "FINITE" : "INFINITE"}
+        </div>
       </div>
 
       <div
@@ -511,6 +556,7 @@ export default function App() {
   const [flashDir, setFlashDir] = useState(null);
 
   const [muted, setMuted] = useState(false);
+  const [wallMode, setWallMode] = useState("finite");
   const [highScore, setHighScore] = useState(
     () => parseInt(localStorage.getItem("snake4p_hs") || "0", 10)
   );
@@ -525,6 +571,7 @@ export default function App() {
   const retryRef = useRef(null);
   const mySlotRef = useRef(-1);
   const speedRef = useRef(TICK_MS);
+  const wallModeRef = useRef("finite");
 
   // Responsive cell size + scroll/touchmove lock
   const [cellSize, setCellSize] = useState(16);
@@ -653,7 +700,10 @@ export default function App() {
     });
 
     // ── Listen: game start ──
-    channel.on("broadcast", { event: "game_start" }, () => {
+    channel.on("broadcast", { event: "game_start" }, ({ payload }) => {
+      const wm = payload?.wallMode || "finite";
+      wallModeRef.current = wm;
+      setWallMode(wm);
       const fresh = initGame();
       gameRef.current = fresh;
       nextDirRef.current = null;
@@ -663,7 +713,10 @@ export default function App() {
     });
 
     // ── Listen: restart ──
-    channel.on("broadcast", { event: "game_restart" }, () => {
+    channel.on("broadcast", { event: "game_restart" }, ({ payload }) => {
+      const wm = payload?.wallMode || wallModeRef.current;
+      wallModeRef.current = wm;
+      setWallMode(wm);
       const fresh = initGame();
       gameRef.current = fresh;
       nextDirRef.current = null;
@@ -674,9 +727,32 @@ export default function App() {
     return channel;
   }
 
-  // ── Host a room ──
-  function handleHost() {
+  // ── Single player ──
+  function handleSinglePlayer(walls) {
     audioEngine.init();
+    wallModeRef.current = walls;
+    setWallMode(walls);
+    isHostRef.current = true;
+    setIsHost(true);
+    setMySlot(0);
+    mySlotRef.current = 0;
+    const plist = [myIdRef.current, null, null, null];
+    playersRef.current = plist;
+    setPlayers([...plist]);
+    speedRef.current = TICK_MS;
+    const fresh = initGame();
+    gameRef.current = fresh;
+    nextDirRef.current = null;
+    setGameState(fresh);
+    audioEngine.start();
+    setScreen("game");
+  }
+
+  // ── Host a room ──
+  function handleHost(walls) {
+    audioEngine.init();
+    wallModeRef.current = walls;
+    setWallMode(walls);
     const code = genCode();
     setRoomCode(code);
     setIsHost(true);
@@ -751,7 +827,7 @@ export default function App() {
     channelRef.current?.send({
       type: "broadcast",
       event: "game_start",
-      payload: {},
+      payload: { wallMode: wallModeRef.current },
     });
   }
 
@@ -759,15 +835,16 @@ export default function App() {
   useEffect(() => {
     if (screen !== "game" || !isHost) return;
     const ch = channelRef.current;
+    const wm = wallModeRef.current;
 
     const tick = () => {
       const prevScore = gameRef.current.score;
       const dir = nextDirRef.current || gameRef.current.direction;
       nextDirRef.current = null;
-      const newState = gameTick(gameRef.current, dir);
+      const newState = gameTick(gameRef.current, dir, wm);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch.send({
+      ch?.send({
         type: "broadcast",
         event: "game_state",
         payload: { state: newState },
@@ -825,20 +902,21 @@ export default function App() {
     channelRef.current?.send({
       type: "broadcast",
       event: "game_restart",
-      payload: {},
+      payload: { wallMode: wallModeRef.current },
     });
 
     if (tickRef.current) clearTimeout(tickRef.current);
     const ch = channelRef.current;
+    const wm = wallModeRef.current;
 
     const tick = () => {
       const prevScore = gameRef.current.score;
       const dir = nextDirRef.current || gameRef.current.direction;
       nextDirRef.current = null;
-      const newState = gameTick(gameRef.current, dir);
+      const newState = gameTick(gameRef.current, dir, wm);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch.send({
+      ch?.send({
         type: "broadcast",
         event: "game_state",
         payload: { state: newState },
@@ -900,7 +978,7 @@ export default function App() {
   // ═════════════════════════════════════════════════════════════════
 
   if (screen === "lobby") {
-    return <LobbyScreen onHost={handleHost} onJoin={handleJoin} />;
+    return <LobbyScreen onSingle={handleSinglePlayer} onHost={handleHost} onJoin={handleJoin} />;
   }
 
   if (screen === "waiting") {
@@ -910,6 +988,7 @@ export default function App() {
         players={players}
         mySlot={mySlot}
         isHost={isHost}
+        wallMode={wallMode}
         onStart={handleStart}
       />
     );
@@ -994,7 +1073,7 @@ export default function App() {
         </div>
       </div>
 
-      <GameBoard state={gameState} cellSize={cellSize} />
+      <GameBoard state={gameState} cellSize={cellSize} wallMode={wallMode} />
 
       <div
         style={{ width: "100%", maxWidth: GRID * cellSize, marginTop: 8 }}
