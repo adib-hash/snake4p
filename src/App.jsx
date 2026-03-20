@@ -24,6 +24,121 @@ const DIR_COLORS = ["#E85D75", "#F0A644", "#4ECDC4", "#7B68EE"];
 const DIR_NAMES = ["Up", "Right", "Down", "Left"];
 const OPPOSITES = { UP: "DOWN", DOWN: "UP", LEFT: "RIGHT", RIGHT: "LEFT" };
 
+// ── AUDIO ENGINE ────────────────────────────────────────────────────
+class LoFiEngine {
+  constructor() {
+    this.ctx = null;
+    this.running = false;
+    this.muted = false;
+    this._timer = null;
+    this._step = 0;
+    this._next = 0;
+    this._stepDur = 60 / 130 / 4; // 16th note at 130 BPM
+  }
+
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (this.ctx.state === "suspended") this.ctx.resume();
+  }
+
+  start() {
+    this.stop();
+    this.init();
+    this.running = true;
+    this._step = 0;
+    this._next = this.ctx.currentTime + 0.05;
+    this._tick();
+  }
+
+  stop() {
+    this.running = false;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+  }
+
+  setMuted(v) { this.muted = v; }
+
+  _tick() {
+    if (!this.running) return;
+    while (this._next < this.ctx.currentTime + 0.1) {
+      this._step16(this._step, this._next);
+      this._step = (this._step + 1) % 16;
+      this._next += this._stepDur;
+    }
+    this._timer = setTimeout(() => this._tick(), 20);
+  }
+
+  _step16(s, t) {
+    if (s % 4 === 0) this._kick(t);
+    if (s === 2 || s === 10 || s === 14) this._hat(t, false);
+    if (s === 6) this._hat(t, true);
+    this._bass(s, t);
+    if (s === 0) this._pad(t);
+  }
+
+  _kick(t) {
+    if (this.muted) return;
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.12);
+    g.gain.setValueAtTime(2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    o.start(t); o.stop(t + 0.28);
+  }
+
+  _hat(t, open) {
+    if (this.muted) return;
+    const c = this.ctx, dur = open ? 0.1 : 0.03;
+    const n = Math.ceil(c.sampleRate * dur);
+    const buf = c.createBuffer(1, n, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource(), hp = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = buf;
+    hp.type = "highpass"; hp.frequency.value = 7500;
+    src.connect(hp); hp.connect(g); g.connect(c.destination);
+    g.gain.setValueAtTime(open ? 0.28 : 0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.start(t); src.stop(t + dur);
+  }
+
+  _bass(s, t) {
+    if (this.muted) return;
+    const F = [55, 0, 0, 0, 55, 0, 82.4, 0, 55, 0, 0, 0, 73.4, 0, 82.4, 0];
+    const freq = F[s]; if (!freq) return;
+    const c = this.ctx, o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+    o.type = "sawtooth"; o.frequency.value = freq;
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(700, t);
+    f.frequency.exponentialRampToValueAtTime(200, t + this._stepDur * 0.7);
+    f.Q.value = 5;
+    o.connect(f); f.connect(g); g.connect(c.destination);
+    const dur = this._stepDur * 0.85;
+    g.gain.setValueAtTime(0.45, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.start(t); o.stop(t + dur);
+  }
+
+  _pad(t) {
+    if (this.muted) return;
+    const c = this.ctx;
+    [110, 164.8, 220].forEach(freq => {
+      const o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+      o.type = "triangle"; o.frequency.value = freq;
+      f.type = "lowpass"; f.frequency.value = 1200; f.Q.value = 1;
+      o.connect(f); f.connect(g); g.connect(c.destination);
+      const dur = this._stepDur * 4;
+      g.gain.setValueAtTime(0.035, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t); o.stop(t + dur);
+    });
+  }
+}
+
+const audioEngine = new LoFiEngine();
+
 // ── GAME LOGIC (pure) ───────────────────────────────────────────────
 function spawnFood(snake) {
   const occ = new Set(snake.map(([x, y]) => `${x},${y}`));
@@ -56,9 +171,15 @@ function gameTick(state, nextDir) {
   const dir = nextDir || state.direction;
   const [dx, dy] = DIR_VECTORS[dir];
   const [hx, hy] = state.snake[0];
-  const nx = (hx + dx + GRID) % GRID;
-  const ny = (hy + dy + GRID) % GRID;
+  const nx = hx + dx;
+  const ny = hy + dy;
 
+  // Wall collision
+  if (nx < 0 || nx >= GRID || ny < 0 || ny >= GRID) {
+    return { ...state, gameOver: true, direction: dir };
+  }
+
+  // Self collision
   if (state.snake.some(([sx, sy]) => sx === nx && sy === ny)) {
     return { ...state, gameOver: true, direction: dir };
   }
@@ -108,6 +229,14 @@ function GameBoard({ state, cellSize }) {
         ctx.lineTo(size, i * cellSize);
         ctx.stroke();
       }
+
+      // Wall border
+      ctx.shadowColor = "#4ECDC4";
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = "rgba(78,205,196,0.55)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, size - 2, size - 2);
+      ctx.shadowBlur = 0;
 
       const t = Date.now() / 400;
       const glow = 8 + Math.sin(t) * 4;
@@ -381,6 +510,8 @@ export default function App() {
   const [gameState, setGameState] = useState(initGame());
   const [flashDir, setFlashDir] = useState(null);
 
+  const [muted, setMuted] = useState(false);
+
   const channelRef = useRef(null);
   const gameRef = useRef(initGame());
   const nextDirRef = useRef(null);
@@ -390,8 +521,9 @@ export default function App() {
   const isHostRef = useRef(false);
   const retryRef = useRef(null);
   const mySlotRef = useRef(-1);
+  const speedRef = useRef(TICK_MS);
 
-  // Responsive cell size
+  // Responsive cell size + scroll/touchmove lock
   const [cellSize, setCellSize] = useState(16);
   useEffect(() => {
     function resize() {
@@ -401,7 +533,12 @@ export default function App() {
     }
     resize();
     window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    const noScroll = (e) => e.preventDefault();
+    document.addEventListener("touchmove", noScroll, { passive: false });
+    return () => {
+      window.removeEventListener("resize", resize);
+      document.removeEventListener("touchmove", noScroll);
+    };
   }, []);
 
   function genCode() {
@@ -519,6 +656,7 @@ export default function App() {
       nextDirRef.current = null;
       setGameState(fresh);
       setScreen("game");
+      audioEngine.start();
     });
 
     // ── Listen: restart ──
@@ -527,6 +665,7 @@ export default function App() {
       gameRef.current = fresh;
       nextDirRef.current = null;
       setGameState(fresh);
+      audioEngine.start();
     });
 
     return channel;
@@ -534,6 +673,7 @@ export default function App() {
 
   // ── Host a room ──
   function handleHost() {
+    audioEngine.init();
     const code = genCode();
     setRoomCode(code);
     setIsHost(true);
@@ -557,6 +697,7 @@ export default function App() {
 
   // ── Join a room ──
   function handleJoin(code) {
+    audioEngine.init();
     setRoomCode(code);
     setIsHost(false);
     isHostRef.current = false;
@@ -600,8 +741,10 @@ export default function App() {
     const fresh = initGame();
     gameRef.current = fresh;
     nextDirRef.current = null;
+    speedRef.current = TICK_MS;
     setGameState(fresh);
     setScreen("game");
+    audioEngine.start();
     channelRef.current?.send({
       type: "broadcast",
       event: "game_start",
@@ -614,7 +757,8 @@ export default function App() {
     if (screen !== "game" || !isHost) return;
     const ch = channelRef.current;
 
-    tickRef.current = setInterval(() => {
+    const tick = () => {
+      const prevScore = gameRef.current.score;
       const dir = nextDirRef.current || gameRef.current.direction;
       nextDirRef.current = null;
       const newState = gameTick(gameRef.current, dir);
@@ -627,11 +771,20 @@ export default function App() {
       });
 
       if (newState.gameOver) {
-        clearInterval(tickRef.current);
+        audioEngine.stop();
+        return;
       }
-    }, TICK_MS);
 
-    return () => clearInterval(tickRef.current);
+      // Speed up slightly each time food is eaten (floor at 75ms)
+      if (newState.score > prevScore) {
+        speedRef.current = Math.max(75, TICK_MS - newState.score * 6);
+      }
+
+      tickRef.current = setTimeout(tick, speedRef.current);
+    };
+
+    tickRef.current = setTimeout(tick, speedRef.current);
+    return () => clearTimeout(tickRef.current);
   }, [screen, isHost]);
 
   // ── Press my button ──
@@ -662,16 +815,20 @@ export default function App() {
     const fresh = initGame();
     gameRef.current = fresh;
     nextDirRef.current = null;
+    speedRef.current = TICK_MS;
     setGameState(fresh);
+    audioEngine.start();
     channelRef.current?.send({
       type: "broadcast",
       event: "game_restart",
       payload: {},
     });
 
-    if (tickRef.current) clearInterval(tickRef.current);
+    if (tickRef.current) clearTimeout(tickRef.current);
     const ch = channelRef.current;
-    tickRef.current = setInterval(() => {
+
+    const tick = () => {
+      const prevScore = gameRef.current.score;
       const dir = nextDirRef.current || gameRef.current.direction;
       nextDirRef.current = null;
       const newState = gameTick(gameRef.current, dir);
@@ -682,8 +839,17 @@ export default function App() {
         event: "game_state",
         payload: { state: newState },
       });
-      if (newState.gameOver) clearInterval(tickRef.current);
-    }, TICK_MS);
+      if (newState.gameOver) {
+        audioEngine.stop();
+        return;
+      }
+      if (newState.score > prevScore) {
+        speedRef.current = Math.max(75, TICK_MS - newState.score * 6);
+      }
+      tickRef.current = setTimeout(tick, speedRef.current);
+    };
+
+    tickRef.current = setTimeout(tick, speedRef.current);
   }
 
   // ── Keyboard for testing ──
@@ -708,7 +874,8 @@ export default function App() {
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
       if (retryRef.current) clearInterval(retryRef.current);
-      if (tickRef.current) clearInterval(tickRef.current);
+      if (tickRef.current) clearTimeout(tickRef.current);
+      audioEngine.stop();
     };
   }, []);
 
@@ -732,6 +899,12 @@ export default function App() {
     );
   }
 
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    audioEngine.setMuted(next);
+  }
+
   const myDir = mySlot >= 0 ? DIRECTIONS[mySlot] : null;
   const myColor = mySlot >= 0 ? DIR_COLORS[mySlot] : "#888";
 
@@ -752,24 +925,51 @@ export default function App() {
         <div style={{ fontSize: 22, fontWeight: 800, color: "#4ECDC4" }}>
           {gameState.score}
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {DIRECTIONS.map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                background: players[i]
-                  ? DIR_COLORS[i]
-                  : "rgba(255,255,255,0.08)",
-                border:
-                  i === mySlot
-                    ? "2px solid #fff"
-                    : "2px solid transparent",
-              }}
-            />
-          ))}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {DIRECTIONS.map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  background: players[i]
+                    ? DIR_COLORS[i]
+                    : "rgba(255,255,255,0.08)",
+                  border:
+                    i === mySlot
+                      ? "2px solid #fff"
+                      : "2px solid transparent",
+                }}
+              />
+            ))}
+          </div>
+          <button
+            onClick={toggleMute}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 4,
+              color: muted ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.5)",
+              lineHeight: 0,
+            }}
+          >
+            {muted ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <line x1="23" y1="9" x2="17" y2="15"/>
+                <line x1="17" y1="9" x2="23" y2="15"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+            )}
+          </button>
         </div>
       </div>
 
