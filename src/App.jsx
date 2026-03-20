@@ -548,6 +548,7 @@ export default function App() {
 
     const ch = joinChannel(code);
     channelRef.current = ch;
+<<<<<<< HEAD
     ch.subscribe((status) => {
       console.log("[snake] host channel status:", status);
     });
