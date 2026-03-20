@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────
 const GRID = 20;
@@ -8,6 +9,8 @@ const TICK_MS = 150;
 const SUPABASE_URL = "https://mohudogfrkucjevydtko.supabase.co";
 const SUPABASE_KEY = "PASTE_YOUR_LEGACY_ANON_KEY_HERE";
 // ▲▲▲ Go to Supabase → Project Settings → API → Legacy anon key ▲▲▲
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const DIRECTIONS = ["UP", "RIGHT", "DOWN", "LEFT"];
 const DIR_LABELS = ["↑", "→", "↓", "←"];
@@ -20,138 +23,6 @@ const DIR_VECTORS = {
 const DIR_COLORS = ["#E85D75", "#F0A644", "#4ECDC4", "#7B68EE"];
 const DIR_NAMES = ["Up", "Right", "Down", "Left"];
 const OPPOSITES = { UP: "DOWN", DOWN: "UP", LEFT: "RIGHT", RIGHT: "LEFT" };
-
-// ── SUPABASE REALTIME BROADCAST ─────────────────────────────────────
-function createChannel(roomCode) {
-  const wsUrl =
-    SUPABASE_URL.replace("https://", "wss://") +
-    "/realtime/v1/websocket?apikey=" +
-    SUPABASE_KEY +
-    "&vsn=1.0.0";
-
-  let ws = null;
-  let ref = 0;
-  let joinRef = null;
-  let heartbeat = null;
-  let alive = true;
-  let joined = false;
-  let pendingMessages = [];
-  const cbs = {};
-  const topic = `realtime:snake-${roomCode}`;
-
-  function on(event, cb) {
-    if (!cbs[event]) cbs[event] = [];
-    cbs[event].push(cb);
-  }
-
-  function emit(event, payload) {
-    (cbs[event] || []).forEach((cb) => {
-      try { cb(payload); } catch (e) { console.error("handler error:", e); }
-    });
-  }
-
-  function broadcast(type, data = {}) {
-    const msg = JSON.stringify({
-      topic,
-      event: "broadcast",
-      payload: { event: type, payload: data, type: "broadcast" },
-      ref: String(++ref),
-    });
-
-    if (ws && ws.readyState === 1 && joined) {
-      ws.send(msg);
-    } else {
-      pendingMessages.push(msg);
-    }
-  }
-
-  function flushPending() {
-    while (pendingMessages.length > 0 && ws && ws.readyState === 1 && joined) {
-      ws.send(pendingMessages.shift());
-    }
-  }
-
-  function connect() {
-    if (!alive) return;
-    joined = false;
-    ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      joinRef = String(++ref);
-      ws.send(
-        JSON.stringify({
-          topic,
-          event: "phx_join",
-          payload: { config: { broadcast: { self: true } } },
-          ref: joinRef,
-        })
-      );
-      heartbeat = setInterval(() => {
-        if (ws.readyState === 1) {
-          ws.send(
-            JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: String(++ref),
-            })
-          );
-        }
-      }, 29000);
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-
-        // Join confirmation — only match our specific join ref
-        if (
-          msg.event === "phx_reply" &&
-          msg.ref === joinRef &&
-          msg.payload?.status === "ok"
-        ) {
-          joined = true;
-          console.log("[snake] joined channel", topic);
-          flushPending();
-          emit("_joined", {});
-          return;
-        }
-
-        // Broadcast message from the channel
-        if (msg.event === "broadcast" && msg.payload) {
-          const eventName = msg.payload.event;
-          const eventData = msg.payload.payload || {};
-          if (eventName) {
-            emit(eventName, eventData);
-          }
-        }
-      } catch (err) {
-        console.error("[snake] ws parse error:", err);
-      }
-    };
-
-    ws.onclose = () => {
-      joined = false;
-      clearInterval(heartbeat);
-      if (alive) {
-        console.log("[snake] reconnecting in 2s...");
-        setTimeout(connect, 2000);
-      }
-    };
-
-    ws.onerror = () => ws.close();
-  }
-
-  function disconnect() {
-    alive = false;
-    joined = false;
-    clearInterval(heartbeat);
-    if (ws) ws.close();
-  }
-
-  connect();
-  return { on, broadcast, disconnect };
-}
 
 // ── GAME LOGIC (pure) ───────────────────────────────────────────────
 function spawnFood(snake) {
@@ -324,7 +195,13 @@ function LobbyScreen({ onHost, onJoin }) {
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 56, marginBottom: 8 }}>🐍</div>
         <h1 style={styles.title}>SNAKE × 4</h1>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 8 }}>
+        <p
+          style={{
+            color: "rgba(255,255,255,0.4)",
+            fontSize: 13,
+            marginTop: 8,
+          }}
+        >
           4 players. 1 snake. 1 button each.
         </p>
       </div>
@@ -335,11 +212,15 @@ function LobbyScreen({ onHost, onJoin }) {
 
       <div style={styles.divider}>
         <div style={styles.dividerLine} />
-        <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>OR</span>
+        <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>
+          OR
+        </span>
         <div style={styles.dividerLine} />
       </div>
 
-      <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 300 }}>
+      <div
+        style={{ display: "flex", gap: 8, width: "100%", maxWidth: 300 }}
+      >
         <input
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -352,8 +233,10 @@ function LobbyScreen({ onHost, onJoin }) {
           disabled={code.length < 4}
           style={{
             ...styles.btnJoin,
-            background: code.length >= 4 ? "#7B68EE" : "rgba(255,255,255,0.05)",
-            color: code.length >= 4 ? "#fff" : "rgba(255,255,255,0.2)",
+            background:
+              code.length >= 4 ? "#7B68EE" : "rgba(255,255,255,0.05)",
+            color:
+              code.length >= 4 ? "#fff" : "rgba(255,255,255,0.2)",
             cursor: code.length >= 4 ? "pointer" : "default",
           }}
         >
@@ -378,7 +261,13 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
           textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: "rgba(255,255,255,0.4)",
+            marginBottom: 4,
+          }}
+        >
           ROOM CODE
         </div>
         <div
@@ -415,8 +304,12 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
               style={{
                 padding: 16,
                 borderRadius: 12,
-                border: `2px solid ${taken ? DIR_COLORS[i] : "rgba(255,255,255,0.06)"}`,
-                background: taken ? `${DIR_COLORS[i]}11` : "rgba(255,255,255,0.02)",
+                border: `2px solid ${
+                  taken ? DIR_COLORS[i] : "rgba(255,255,255,0.06)"
+                }`,
+                background: taken
+                  ? `${DIR_COLORS[i]}11`
+                  : "rgba(255,255,255,0.02)",
                 textAlign: "center",
                 transition: "all 0.3s",
               }}
@@ -425,7 +318,9 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
                 style={{
                   fontSize: 28,
                   marginBottom: 4,
-                  color: taken ? DIR_COLORS[i] : "rgba(255,255,255,0.15)",
+                  color: taken
+                    ? DIR_COLORS[i]
+                    : "rgba(255,255,255,0.15)",
                 }}
               >
                 {DIR_LABELS[i]}
@@ -433,7 +328,9 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
               <div
                 style={{
                   fontSize: 12,
-                  color: taken ? DIR_COLORS[i] : "rgba(255,255,255,0.2)",
+                  color: taken
+                    ? DIR_COLORS[i]
+                    : "rgba(255,255,255,0.2)",
                 }}
               >
                 {taken ? (isMe ? "You" : "Joined") : "Waiting..."}
@@ -460,7 +357,13 @@ function WaitingRoom({ roomCode, players, mySlot, isHost, onStart }) {
           {ready >= 2 ? "Start Game" : "Need at least 2 players"}
         </button>
       ) : (
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: "rgba(255,255,255,0.3)",
+            fontStyle: "italic",
+          }}
+        >
           Waiting for host to start...
         </div>
       )}
@@ -486,6 +389,7 @@ export default function App() {
   const tickRef = useRef(null);
   const isHostRef = useRef(false);
   const retryRef = useRef(null);
+  const mySlotRef = useRef(-1);
 
   // Responsive cell size
   const [cellSize, setCellSize] = useState(16);
@@ -507,40 +411,67 @@ export default function App() {
     ).join("");
   }
 
-  // ── Wire channel (called once per session) ──
-  function wireChannel(ch) {
-    // HOST: handle slot requests from joiners
-    ch.on("request_slot", ({ playerId }) => {
+  // ── Create and subscribe to a Supabase Realtime channel ──
+  function joinChannel(code) {
+    const channel = supabase.channel(`snake-${code}`, {
+      config: { broadcast: { self: true } },
+    });
+
+    // ── Listen: slot requests (host handles) ──
+    channel.on("broadcast", { event: "request_slot" }, ({ payload }) => {
       if (!isHostRef.current) return;
-      // Already seated? Re-send assignment
+      const { playerId } = payload;
+      // Already seated? Re-send
       if (playersRef.current.includes(playerId)) {
         const idx = playersRef.current.indexOf(playerId);
-        ch.broadcast("slot_assigned", { slot: idx, playerId });
-        ch.broadcast("player_list", { list: [...playersRef.current] });
+        channel.send({
+          type: "broadcast",
+          event: "slot_assigned",
+          payload: { slot: idx, playerId },
+        });
+        channel.send({
+          type: "broadcast",
+          event: "player_list",
+          payload: { list: [...playersRef.current] },
+        });
         return;
       }
       const idx = playersRef.current.indexOf(null);
-      if (idx === -1) return; // Full
+      if (idx === -1) return;
       playersRef.current[idx] = playerId;
       setPlayers([...playersRef.current]);
-      ch.broadcast("slot_assigned", { slot: idx, playerId });
-      ch.broadcast("player_list", { list: [...playersRef.current] });
-      console.log("[snake] host assigned slot", idx, "to", playerId);
+      console.log("[snake] host: assigned slot", idx, "to", playerId);
+      channel.send({
+        type: "broadcast",
+        event: "slot_assigned",
+        payload: { slot: idx, playerId },
+      });
+      channel.send({
+        type: "broadcast",
+        event: "player_list",
+        payload: { list: [...playersRef.current] },
+      });
     });
 
-    // HOST: respond to sync requests
-    ch.on("request_sync", () => {
+    // ── Listen: sync requests (host handles) ──
+    channel.on("broadcast", { event: "request_sync" }, () => {
       if (!isHostRef.current) return;
-      ch.broadcast("player_list", { list: [...playersRef.current] });
+      channel.send({
+        type: "broadcast",
+        event: "player_list",
+        payload: { list: [...playersRef.current] },
+      });
     });
 
-    // EVERYONE: receive player list updates
-    ch.on("player_list", ({ list }) => {
+    // ── Listen: player list (everyone) ──
+    channel.on("broadcast", { event: "player_list" }, ({ payload }) => {
+      const { list } = payload;
       if (!list || !Array.isArray(list)) return;
       playersRef.current = [...list];
       setPlayers([...list]);
       const idx = list.indexOf(myIdRef.current);
       if (idx !== -1) {
+        mySlotRef.current = idx;
         setMySlot(idx);
         if (retryRef.current) {
           clearInterval(retryRef.current);
@@ -549,38 +480,40 @@ export default function App() {
       }
     });
 
-    // Slot assignment (for the specific player)
-    ch.on("slot_assigned", ({ slot, playerId }) => {
-      if (playerId === myIdRef.current) {
-        setMySlot(slot);
+    // ── Listen: slot assigned ──
+    channel.on("broadcast", { event: "slot_assigned" }, ({ payload }) => {
+      if (payload.playerId === myIdRef.current) {
+        mySlotRef.current = payload.slot;
+        setMySlot(payload.slot);
         if (retryRef.current) {
           clearInterval(retryRef.current);
           retryRef.current = null;
         }
-        console.log("[snake] I got slot", slot);
+        console.log("[snake] I got slot", payload.slot);
       }
     });
 
-    // Direction input (host processes)
-    ch.on("direction", ({ dir }) => {
+    // ── Listen: direction (host processes) ──
+    channel.on("broadcast", { event: "direction" }, ({ payload }) => {
       if (!isHostRef.current) return;
+      const { dir } = payload;
       const cur = gameRef.current.direction;
       if (dir && OPPOSITES[dir] !== cur) {
         nextDirRef.current = dir;
       }
     });
 
-    // Game state (non-host receives)
-    ch.on("game_state", ({ state }) => {
+    // ── Listen: game state (non-host receives) ──
+    channel.on("broadcast", { event: "game_state" }, ({ payload }) => {
       if (isHostRef.current) return;
-      if (state) {
-        gameRef.current = state;
-        setGameState(state);
+      if (payload.state) {
+        gameRef.current = payload.state;
+        setGameState(payload.state);
       }
     });
 
-    // Game start
-    ch.on("game_start", () => {
+    // ── Listen: game start ──
+    channel.on("broadcast", { event: "game_start" }, () => {
       const fresh = initGame();
       gameRef.current = fresh;
       nextDirRef.current = null;
@@ -588,13 +521,20 @@ export default function App() {
       setScreen("game");
     });
 
-    // Restart
-    ch.on("game_restart", () => {
+    // ── Listen: restart ──
+    channel.on("broadcast", { event: "game_restart" }, () => {
       const fresh = initGame();
       gameRef.current = fresh;
       nextDirRef.current = null;
       setGameState(fresh);
     });
+
+    // Subscribe to channel
+    channel.subscribe((status) => {
+      console.log("[snake] channel status:", status);
+    });
+
+    return channel;
   }
 
   // ── Host a room ──
@@ -604,15 +544,15 @@ export default function App() {
     setIsHost(true);
     isHostRef.current = true;
     setMySlot(0);
+    mySlotRef.current = 0;
 
     const plist = [myIdRef.current, null, null, null];
     playersRef.current = plist;
     setPlayers([...plist]);
     setScreen("waiting");
 
-    const ch = createChannel(code);
+    const ch = joinChannel(code);
     channelRef.current = ch;
-    wireChannel(ch);
 
     console.log("[snake] hosting room", code, "myId:", myIdRef.current);
   }
@@ -624,23 +564,36 @@ export default function App() {
     isHostRef.current = false;
     setScreen("waiting");
 
-    const ch = createChannel(code);
+    const ch = joinChannel(code);
     channelRef.current = ch;
-    wireChannel(ch);
 
-    // Once connected to Phoenix channel, request a slot with retries
-    ch.on("_joined", () => {
-      console.log("[snake] connected, requesting slot. myId:", myIdRef.current);
+    // Once subscribed, request a slot. Retry every 2s until acknowledged.
+    ch.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log(
+          "[snake] subscribed, requesting slot. myId:",
+          myIdRef.current
+        );
 
-      ch.broadcast("request_slot", { playerId: myIdRef.current });
-      ch.broadcast("request_sync", {});
+        const sendRequest = () => {
+          ch.send({
+            type: "broadcast",
+            event: "request_slot",
+            payload: { playerId: myIdRef.current },
+          });
+          ch.send({
+            type: "broadcast",
+            event: "request_sync",
+            payload: {},
+          });
+        };
 
-      // Retry every 2s until we get a slot assignment
-      retryRef.current = setInterval(() => {
-        console.log("[snake] retrying slot request...");
-        ch.broadcast("request_slot", { playerId: myIdRef.current });
-        ch.broadcast("request_sync", {});
-      }, 2000);
+        sendRequest();
+        retryRef.current = setInterval(() => {
+          console.log("[snake] retrying slot request...");
+          sendRequest();
+        }, 2000);
+      }
     });
   }
 
@@ -651,7 +604,11 @@ export default function App() {
     nextDirRef.current = null;
     setGameState(fresh);
     setScreen("game");
-    channelRef.current?.broadcast("game_start", {});
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "game_start",
+      payload: {},
+    });
   }
 
   // ── Host game loop ──
@@ -665,7 +622,11 @@ export default function App() {
       const newState = gameTick(gameRef.current, dir);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch.broadcast("game_state", { state: newState });
+      ch.send({
+        type: "broadcast",
+        event: "game_state",
+        payload: { state: newState },
+      });
 
       if (newState.gameOver) {
         clearInterval(tickRef.current);
@@ -677,19 +638,24 @@ export default function App() {
 
   // ── Press my button ──
   function handlePress() {
-    if (mySlot < 0 || gameState.gameOver) return;
-    const dir = DIRECTIONS[mySlot];
+    const slot = mySlotRef.current;
+    if (slot < 0 || gameState.gameOver) return;
+    const dir = DIRECTIONS[slot];
 
     setFlashDir(dir);
     setTimeout(() => setFlashDir(null), 120);
 
-    if (isHost) {
+    if (isHostRef.current) {
       const cur = gameRef.current.direction;
       if (OPPOSITES[dir] !== cur) {
         nextDirRef.current = dir;
       }
     } else {
-      channelRef.current?.broadcast("direction", { dir });
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "direction",
+        payload: { dir },
+      });
     }
   }
 
@@ -699,7 +665,11 @@ export default function App() {
     gameRef.current = fresh;
     nextDirRef.current = null;
     setGameState(fresh);
-    channelRef.current?.broadcast("game_restart", {});
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "game_restart",
+      payload: {},
+    });
 
     if (tickRef.current) clearInterval(tickRef.current);
     const ch = channelRef.current;
@@ -709,7 +679,11 @@ export default function App() {
       const newState = gameTick(gameRef.current, dir);
       gameRef.current = newState;
       setGameState({ ...newState });
-      ch.broadcast("game_state", { state: newState });
+      ch.send({
+        type: "broadcast",
+        event: "game_state",
+        payload: { state: newState },
+      });
       if (newState.gameOver) clearInterval(tickRef.current);
     }, TICK_MS);
   }
@@ -724,17 +698,17 @@ export default function App() {
         ArrowRight: "RIGHT",
       };
       const dir = map[e.key];
-      if (!dir || mySlot < 0) return;
-      if (DIRECTIONS[mySlot] === dir) handlePress();
+      if (!dir || mySlotRef.current < 0) return;
+      if (DIRECTIONS[mySlotRef.current] === dir) handlePress();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mySlot, gameState.gameOver]);
+  }, [gameState.gameOver]);
 
   // ── Cleanup ──
   useEffect(() => {
     return () => {
-      channelRef.current?.disconnect();
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
       if (retryRef.current) clearInterval(retryRef.current);
       if (tickRef.current) clearInterval(tickRef.current);
     };
@@ -803,7 +777,9 @@ export default function App() {
 
       <GameBoard state={gameState} cellSize={cellSize} />
 
-      <div style={{ width: "100%", maxWidth: GRID * cellSize, marginTop: 8 }}>
+      <div
+        style={{ width: "100%", maxWidth: GRID * cellSize, marginTop: 8 }}
+      >
         <div
           style={{
             fontSize: 10,
