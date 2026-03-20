@@ -146,6 +146,20 @@ class LoFiEngine {
 
 const audioEngine = new LoFiEngine();
 
+// ── DIRECTION ARROW SVG ──────────────────────────────────────────────
+function ArrowIcon({ direction, size = 40 }) {
+  const rotations = { UP: 0, RIGHT: 90, DOWN: 180, LEFT: 270 };
+  const rot = rotations[direction] ?? 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: `rotate(${rot}deg)`, flexShrink: 0 }}>
+      <line x1="12" y1="19" x2="12" y2="5"/>
+      <polyline points="5 12 12 5 19 12"/>
+    </svg>
+  );
+}
+
 // ── GAME LOGIC (pure) ───────────────────────────────────────────────
 function spawnFood(snake) {
   const occ = new Set(snake.map(([x, y]) => `${x},${y}`));
@@ -734,7 +748,9 @@ export default function App() {
       if (!isHostRef.current) return;
       const { dir } = payload;
       if (!DIRECTIONS.includes(dir)) return; // guard against malformed/serialized payloads
-      const cur = gameRef.current.direction;
+      const cur = dirQueueRef.current.length > 0
+        ? dirQueueRef.current[dirQueueRef.current.length - 1]
+        : gameRef.current.direction;
       if (OPPOSITES[dir] !== cur) {
         if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
@@ -945,7 +961,9 @@ export default function App() {
     setTimeout(() => setFlashDir(null), 120);
 
     if (isHostRef.current) {
-      const cur = gameRef.current.direction;
+      const cur = dirQueueRef.current.length > 0
+        ? dirQueueRef.current[dirQueueRef.current.length - 1]
+        : gameRef.current.direction;
       if (OPPOSITES[dir] !== cur) {
         if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
@@ -1325,7 +1343,9 @@ export default function App() {
               outline: "none",
             }}
           >
-            {mySlot >= 0 ? DIR_LABELS[mySlot] : "?"}
+            {mySlot >= 0
+              ? <ArrowIcon direction={DIRECTIONS[mySlot]} size={48} />
+              : <span style={{ fontSize: 48 }}>?</span>}
             <span style={{ fontSize: 16, opacity: 0.5 }}>
               {mySlot >= 0 ? DIR_NAMES[mySlot] : ""}
             </span>

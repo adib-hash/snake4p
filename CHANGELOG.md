@@ -1,5 +1,19 @@
 # Changelog — Snake × 4
 
+## v1.9.0 — 2026-03-20
+
+### Fix: false game-over from rapid direction inputs
+
+The opposite-direction guard (which prevents the snake from reversing onto itself) was checking against the *currently executing* direction, not the *last queued* direction. If two players pressed their buttons in rapid succession — e.g. RIGHT then LEFT while moving UP — both passed the guard and were queued. On the next tick the snake would attempt to reverse direction, causing an immediate self-collision. Fix: the guard now checks the tail of the direction queue, so no two queued inputs can be mutually opposite.
+
+Fixed in both `handlePress` (host local input) and the `direction` broadcast listener (non-host inputs arriving at the host).
+
+### Fix: direction button shows question mark
+
+The multiplayer direction button displayed Unicode arrow characters (↑ → ↓ ←) which JetBrains Mono doesn't support, rendering them as `?`. Replaced with SVG arrow icons (rotate-transform of a single up-arrow path).
+
+---
+
 ## v1.8.0 — 2026-03-20
 
 ### Latency & reliability improvements
