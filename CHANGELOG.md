@@ -1,5 +1,22 @@
 # Changelog — Snake × 4
 
+## v2.0.0 — 2026-03-20
+
+### Multiplayer Input Lag Reduction (three compounding optimizations)
+
+Non-host players previously experienced 200–350ms of perceived lag between pressing their button and seeing the snake move. This release eliminates most of that through three layered fixes:
+
+**1. Client-side prediction (biggest win)**
+When a non-host player presses their button, the predicted next game state is computed and displayed immediately — eliminating the full round-trip wait. The host's authoritative `game_state` broadcast arrives ~150ms later and silently overwrites the prediction. Food position and score are intentionally held at their current values in the prediction (host and client use different random seeds, so food would diverge by one frame — suppressed to prevent a visible flicker on reconcile). Game-over is never predicted; host confirmation is always required.
+
+**2. Tick rate: 200ms → 150ms with adjusted speed curve**
+Reduces worst-case tick-wait latency by 25%. The speed formula is adjusted (`×5` per point vs `×8`) so the game reaches its 80ms difficulty cap at roughly the same score as before. Mid-game pace is marginally faster — an intentional feel improvement.
+
+**3. Removed `self: true` from Supabase channel config**
+With `self: true`, the host was receiving its own `game_start` and `game_restart` broadcasts and running duplicate state initialization (no host guard on those handlers). Removing `self: true` eliminates the double-fire. The `direction` and `game_state` handlers already had host guards and are unaffected.
+
+---
+
 ## v1.9.1 — 2026-03-20
 
 ### Fix: joiner stuck as spectator with "?" button

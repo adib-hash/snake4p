@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────
 const GRID = 20;
-const TICK_MS = 200; // starting tick speed (ms); speeds up as score rises
+const TICK_MS = 150; // starting tick speed (ms); speeds up as score rises
 
 // ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS HERE ▼▼▼
 const SUPABASE_URL = "https://fipnujvxhcqsgxqqxrxn.supabase.co";
@@ -612,6 +612,7 @@ export default function App() {
   const [isHost, setIsHost] = useState(false);
   const [players, setPlayers] = useState([null, null, null, null]);
   const [gameState, setGameState] = useState(initGame());
+  const [displayState, setDisplayState] = useState(initGame());
   const [flashDir, setFlashDir] = useState(null);
 
   const [muted, setMuted] = useState(false);
@@ -630,6 +631,7 @@ export default function App() {
   const myIdRef = useRef(Math.random().toString(36).slice(2, 8));
   const tickRef = useRef(null);
   const isHostRef = useRef(false);
+  const predictionRef = useRef(null);
   const retryRef = useRef(null);
   const mySlotRef = useRef(-1);
   const speedRef = useRef(TICK_MS);
@@ -663,7 +665,6 @@ export default function App() {
   // ── Create and subscribe to a Supabase Realtime channel ──
   function joinChannel(code) {
     const channel = supabase.channel(`snake-${code}`, {
-      config: { broadcast: { self: true } },
       worker: true,  // Run heartbeat in Web Worker — reduces iOS background throttling
     });
 
@@ -761,7 +762,9 @@ export default function App() {
       if (isHostRef.current) return;
       if (payload.state) {
         gameRef.current = payload.state;
+        predictionRef.current = null;          // clear any pending prediction
         setGameState(payload.state);
+        setDisplayState(payload.state);        // authoritative state wins
       }
     });
 
@@ -784,6 +787,7 @@ export default function App() {
       gameRef.current = fresh;
       dirQueueRef.current = [];
       setGameState(fresh);
+      setDisplayState(fresh);
       setScreen("game");
       audioEngine.start();
       // If we never received a slot assignment, request one now
@@ -805,6 +809,7 @@ export default function App() {
       gameRef.current = fresh;
       dirQueueRef.current = [];
       setGameState(fresh);
+      setDisplayState(fresh);
       audioEngine.start();
     });
 
@@ -830,6 +835,7 @@ export default function App() {
     gameRef.current = fresh;
     dirQueueRef.current = [];
     setGameState(fresh);
+    setDisplayState(fresh);
     audioEngine.start();
     setScreen("game");
   }
@@ -921,6 +927,7 @@ export default function App() {
     dirQueueRef.current = [];
     speedRef.current = TICK_MS;
     setGameState(fresh);
+    setDisplayState(fresh);
     setScreen("game");
     audioEngine.start();
     channelRef.current?.send({
@@ -943,10 +950,11 @@ export default function App() {
       const newState = gameTick(gameRef.current, dir, wm);
       gameRef.current = newState;
       setGameState({ ...newState });
+      setDisplayState({ ...newState });
       channelRef.current?.send({ type: "broadcast", event: "game_state", payload: { state: newState } });
       if (newState.gameOver) { audioEngine.stop(); return; }
       if (newState.score > prevScore) {
-        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 8);
+        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 5);
       }
       // Drift correction: subtract actual execution time from next delay
       const elapsed = Date.now() - tickStart;
@@ -980,6 +988,20 @@ export default function App() {
         if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
     } else {
+      // Compute and show local prediction immediately (eliminates perceived lag)
+      const cur = predictionRef.current
+        ? predictionRef.current.atDirection
+        : gameRef.current.direction;
+      if (OPPOSITES[dir] !== cur && !gameRef.current.gameOver) {
+        const predicted = gameTick(gameRef.current, dir, wallModeRef.current);
+        if (!predicted.gameOver) {
+          // Keep current food/score — host uses different Math.random(), so food
+          // position would diverge. Suppress to avoid a visible flicker on reconcile.
+          const safePredict = { ...predicted, food: gameRef.current.food, score: gameRef.current.score };
+          predictionRef.current = { atDirection: dir };
+          setDisplayState(safePredict);
+        }
+      }
       channelRef.current?.send({
         type: "broadcast",
         event: "direction",
@@ -995,6 +1017,7 @@ export default function App() {
     dirQueueRef.current = [];
     speedRef.current = TICK_MS;
     setGameState(fresh);
+    setDisplayState(fresh);
     audioEngine.start();
     channelRef.current?.send({
       type: "broadcast",
@@ -1060,6 +1083,7 @@ export default function App() {
     const fresh = initGame();
     gameRef.current = fresh;
     setGameState(fresh);
+    setDisplayState(fresh);
   }
 
   // ── Cleanup ──
@@ -1246,7 +1270,7 @@ export default function App() {
         </div>
       </div>
 
-      <GameBoard state={gameState} cellSize={cellSize} wallMode={wallMode} />
+      <GameBoard state={displayState} cellSize={cellSize} wallMode={wallMode} />
 
       <div
         style={{ width: "100%", maxWidth: GRID * cellSize, marginTop: 8 }}
