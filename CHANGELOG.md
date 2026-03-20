@@ -1,5 +1,18 @@
 # Changelog — Snake × 4
 
+## v1.3.0 — 2026-03-20
+
+### Larger play field
+Increased the canvas size budget from 45% → 55% of screen height, and widened the horizontal max. The snake has significantly more room now.
+
+### Rebalanced difficulty curve
+Base speed slowed from 150ms → 250ms per tick. First 2 foods eaten have no speed change (easy warmup). From food 3 onward, speed increases by 10ms per food, bottoming out at 80ms — roughly 3x the starting speed. Players get a gentle on-ramp before the pace picks up.
+
+### Persistent high score
+High score saved to `localStorage` and displayed in the game header below the live score. Persists across sessions on each device.
+
+---
+
 ## v1.2.0 — 2026-03-20
 
 ### Wall collision

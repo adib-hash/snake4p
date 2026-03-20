@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 // ── CONFIG ──────────────────────────────────────────────────────────
 const GRID = 20;
-const TICK_MS = 150;
+const TICK_MS = 250; // starting tick speed (ms); speeds up as score rises
 
 // ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS HERE ▼▼▼
 const SUPABASE_URL = "https://fipnujvxhcqsgxqqxrxn.supabase.co";
@@ -511,6 +511,9 @@ export default function App() {
   const [flashDir, setFlashDir] = useState(null);
 
   const [muted, setMuted] = useState(false);
+  const [highScore, setHighScore] = useState(
+    () => parseInt(localStorage.getItem("snake4p_hs") || "0", 10)
+  );
 
   const channelRef = useRef(null);
   const gameRef = useRef(initGame());
@@ -527,8 +530,8 @@ export default function App() {
   const [cellSize, setCellSize] = useState(16);
   useEffect(() => {
     function resize() {
-      const maxW = Math.min(window.innerWidth - 32, 480);
-      const maxH = window.innerHeight * 0.45;
+      const maxW = Math.min(window.innerWidth - 20, 540);
+      const maxH = window.innerHeight * 0.55;
       setCellSize(Math.floor(Math.min(maxW, maxH) / GRID));
     }
     resize();
@@ -777,7 +780,8 @@ export default function App() {
 
       // Speed up slightly each time food is eaten (floor at 75ms)
       if (newState.score > prevScore) {
-        speedRef.current = Math.max(75, TICK_MS - newState.score * 6);
+        // No speed change on first 2 foods; then -10ms per food, floor 80ms
+        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 10);
       }
 
       tickRef.current = setTimeout(tick, speedRef.current);
@@ -844,7 +848,8 @@ export default function App() {
         return;
       }
       if (newState.score > prevScore) {
-        speedRef.current = Math.max(75, TICK_MS - newState.score * 6);
+        // No speed change on first 2 foods; then -10ms per food, floor 80ms
+        speedRef.current = Math.max(80, TICK_MS - Math.max(0, newState.score - 2) * 10);
       }
       tickRef.current = setTimeout(tick, speedRef.current);
     };
@@ -868,6 +873,17 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [gameState.gameOver]);
+
+  // ── Persist high score ──
+  useEffect(() => {
+    if (gameState.gameOver && gameState.score > 0) {
+      setHighScore((prev) => {
+        const next = Math.max(prev, gameState.score);
+        localStorage.setItem("snake4p_hs", String(next));
+        return next;
+      });
+    }
+  }, [gameState.gameOver, gameState.score]);
 
   // ── Cleanup ──
   useEffect(() => {
@@ -922,8 +938,13 @@ export default function App() {
         <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
           {roomCode}
         </div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: "#4ECDC4" }}>
-          {gameState.score}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#4ECDC4" }}>
+            {gameState.score}
+          </div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 1 }}>
+            BEST {highScore}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <div style={{ display: "flex", gap: 4 }}>
