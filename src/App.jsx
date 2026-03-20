@@ -204,38 +204,73 @@ function gameTick(state, nextDir, wallMode = "finite") {
 function GameBoard({ state, cellSize, wallMode }) {
   const canvasRef = useRef(null);
   const animRef = useRef(null);
+  const stateRef = useRef(state);
+  const wallModeRef2 = useRef(wallMode);
+  const cellSizeRef = useRef(cellSize);
+  const gridCanvasRef = useRef(null);
 
+  // Keep refs in sync every render (no re-subscription needed)
+  stateRef.current = state;
+  wallModeRef2.current = wallMode;
+  cellSizeRef.current = cellSize;
+
+  // Rebuild canvas size + cached offscreen grid when cellSize changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const size = GRID * cellSize;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + "px";
+    canvas.style.height = size + "px";
+
+    // Pre-render static grid to offscreen canvas
+    const gc = document.createElement("canvas");
+    gc.width = size * dpr;
+    gc.height = size * dpr;
+    const gctx = gc.getContext("2d");
+    gctx.scale(dpr, dpr);
+    gctx.fillStyle = "#0a0a0f";
+    gctx.fillRect(0, 0, size, size);
+    gctx.strokeStyle = "rgba(255,255,255,0.03)";
+    gctx.lineWidth = 0.5;
+    for (let i = 0; i <= GRID; i++) {
+      gctx.beginPath(); gctx.moveTo(i * cellSize, 0); gctx.lineTo(i * cellSize, size); gctx.stroke();
+      gctx.beginPath(); gctx.moveTo(0, i * cellSize); gctx.lineTo(size, i * cellSize); gctx.stroke();
+    }
+    gridCanvasRef.current = gc;
+  }, [cellSize]);
+
+  // Continuous RAF loop — runs once, reads state from refs to avoid restart jank
   useEffect(() => {
     let running = true;
 
     function draw() {
+      if (!running) return;
       const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      const size = GRID * cellSize;
-      canvas.width = size;
-      canvas.height = size;
-
-      const { snake, food, gameOver, score } = state;
-
-      ctx.fillStyle = "#0a0a0f";
-      ctx.fillRect(0, 0, size, size);
-
-      ctx.strokeStyle = "rgba(255,255,255,0.03)";
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i <= GRID; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * cellSize, 0);
-        ctx.lineTo(i * cellSize, size);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, i * cellSize);
-        ctx.lineTo(size, i * cellSize);
-        ctx.stroke();
+      const gridCanvas = gridCanvasRef.current;
+      if (!canvas || !gridCanvas) {
+        animRef.current = requestAnimationFrame(draw);
+        return;
       }
 
-      // Wall border — glows when finite, dim dashed when infinite
-      if (wallMode === "finite") {
+      const dpr = window.devicePixelRatio || 1;
+      const cs = cellSizeRef.current;
+      const size = GRID * cs;
+      const ctx = canvas.getContext("2d");
+      const { snake, food, gameOver, score } = stateRef.current;
+      const wm = wallModeRef2.current;
+
+      // Composite cached background + grid (one fast blit)
+      ctx.drawImage(gridCanvas, 0, 0);
+
+      // All logical drawing in CSS-pixel space
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      // Wall border
+      if (wm === "finite") {
         ctx.shadowColor = "#4ECDC4";
         ctx.shadowBlur = 8;
         ctx.strokeStyle = "rgba(78,205,196,0.55)";
@@ -251,22 +286,18 @@ function GameBoard({ state, cellSize, wallMode }) {
       ctx.shadowBlur = 0;
       ctx.setLineDash([]);
 
+      // Food with animated glow
       const t = Date.now() / 400;
       const glow = 8 + Math.sin(t) * 4;
       ctx.shadowColor = "#ff6b6b";
       ctx.shadowBlur = glow;
       ctx.fillStyle = "#ff6b6b";
       ctx.beginPath();
-      ctx.arc(
-        food[0] * cellSize + cellSize / 2,
-        food[1] * cellSize + cellSize / 2,
-        cellSize * 0.35,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(food[0] * cs + cs / 2, food[1] * cs + cs / 2, cs * 0.35, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
 
+      // Snake segments
       snake.forEach(([x, y], i) => {
         const ratio = i / Math.max(snake.length - 1, 1);
         const r = Math.round(78 + (30 - 78) * ratio);
@@ -274,11 +305,11 @@ function GameBoard({ state, cellSize, wallMode }) {
         const b = Math.round(196 + (255 - 196) * ratio);
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         const pad = i === 0 ? 0.5 : 1;
-        const radius = i === 0 ? cellSize * 0.15 : cellSize * 0.1;
-        const rx = x * cellSize + pad;
-        const ry = y * cellSize + pad;
-        const rw = cellSize - pad * 2;
-        const rh = cellSize - pad * 2;
+        const radius = i === 0 ? cs * 0.15 : cs * 0.1;
+        const rx = x * cs + pad;
+        const ry = y * cs + pad;
+        const rw = cs - pad * 2;
+        const rh = cs - pad * 2;
         ctx.beginPath();
         ctx.moveTo(rx + radius, ry);
         ctx.lineTo(rx + rw - radius, ry);
@@ -292,29 +323,29 @@ function GameBoard({ state, cellSize, wallMode }) {
         ctx.fill();
       });
 
+      // Game-over overlay
       if (gameOver) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.fillRect(0, 0, size, size);
         ctx.fillStyle = "#E85D75";
-        ctx.font = `bold ${cellSize * 1.5}px 'JetBrains Mono', monospace`;
+        ctx.font = `bold ${cs * 1.5}px 'JetBrains Mono', monospace`;
         ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", size / 2, size / 2 - cellSize);
+        ctx.fillText("GAME OVER", size / 2, size / 2 - cs);
         ctx.fillStyle = "#ccc";
-        ctx.font = `${cellSize * 0.7}px 'JetBrains Mono', monospace`;
-        ctx.fillText(`Score: ${score}`, size / 2, size / 2 + cellSize * 0.5);
+        ctx.font = `${cs * 0.7}px 'JetBrains Mono', monospace`;
+        ctx.fillText(`Score: ${score}`, size / 2, size / 2 + cs * 0.5);
       }
 
-      if (running && !gameOver) {
-        animRef.current = requestAnimationFrame(draw);
-      }
+      ctx.restore();
+      animRef.current = requestAnimationFrame(draw);
     }
 
-    draw();
+    animRef.current = requestAnimationFrame(draw);
     return () => {
       running = false;
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [state, cellSize, wallMode]);
+  }, []); // Empty deps — loop runs once and reads state via refs
 
   return (
     <canvas
@@ -350,7 +381,7 @@ function LobbyScreen({ onSingle, onHost, onJoin }) {
       <div style={{ textAlign: "center" }}>
         <h1 style={styles.title}>SNAKE × 4</h1>
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 8 }}>
-          {mode === "single" ? "Solo. One button. Go." : "4 players. 1 snake. 1 button each."}
+          {mode === "single" ? "Solo. D-pad. Go." : "4 players. 1 snake. 1 button each."}
         </p>
       </div>
 
@@ -557,6 +588,8 @@ export default function App() {
 
   const [muted, setMuted] = useState(false);
   const [wallMode, setWallMode] = useState("finite");
+  const [isSinglePlayer, setIsSinglePlayer] = useState(false);
+  const isSinglePlayerRef = useRef(false);
   const [highScore, setHighScore] = useState(
     () => parseInt(localStorage.getItem("snake4p_hs") || "0", 10)
   );
@@ -734,6 +767,8 @@ export default function App() {
     setWallMode(walls);
     isHostRef.current = true;
     setIsHost(true);
+    isSinglePlayerRef.current = true;
+    setIsSinglePlayer(true);
     setMySlot(0);
     mySlotRef.current = 0;
     const plist = [myIdRef.current, null, null, null];
@@ -869,10 +904,10 @@ export default function App() {
   }, [screen, isHost]);
 
   // ── Press my button ──
-  function handlePress() {
+  function handlePress(explicitDir) {
     const slot = mySlotRef.current;
     if (slot < 0 || gameState.gameOver) return;
-    const dir = DIRECTIONS[slot];
+    const dir = explicitDir != null ? explicitDir : DIRECTIONS[slot];
 
     setFlashDir(dir);
     setTimeout(() => setFlashDir(null), 120);
@@ -935,7 +970,7 @@ export default function App() {
     tickRef.current = setTimeout(tick, speedRef.current);
   }
 
-  // ── Keyboard for testing ──
+  // ── Keyboard ──
   useEffect(() => {
     function onKey(e) {
       const map = {
@@ -946,7 +981,10 @@ export default function App() {
       };
       const dir = map[e.key];
       if (!dir || mySlotRef.current < 0) return;
-      if (DIRECTIONS[mySlotRef.current] === dir) handlePress();
+      // Single player: all 4 arrow keys work. Multiplayer: only the assigned direction.
+      if (isSinglePlayerRef.current || DIRECTIONS[mySlotRef.current] === dir) {
+        handlePress(dir);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1088,38 +1126,114 @@ export default function App() {
             letterSpacing: 2,
           }}
         >
-          Your control
+          {isSinglePlayer ? "Controls" : "Your control"}
         </div>
-        <button
-          onPointerDown={handlePress}
-          style={{
-            width: "100%",
-            height: 110,
-            borderRadius: 16,
-            border: `3px solid ${myColor}`,
-            background:
-              flashDir === myDir
-                ? `${myColor}33`
-                : "rgba(255,255,255,0.03)",
-            color: myColor,
-            fontSize: 48,
-            fontFamily: "'JetBrains Mono', monospace",
-            cursor: "pointer",
-            transition: "background 0.1s",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 12,
-            userSelect: "none",
-            WebkitTapHighlightColor: "transparent",
-            outline: "none",
-          }}
-        >
-          {mySlot >= 0 ? DIR_LABELS[mySlot] : "?"}
-          <span style={{ fontSize: 16, opacity: 0.5 }}>
-            {mySlot >= 0 ? DIR_NAMES[mySlot] : ""}
-          </span>
-        </button>
+
+        {isSinglePlayer ? (
+          /* D-pad for single player */
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {/* Row 1: empty, UP, empty */}
+            <div />
+            <button
+              onPointerDown={() => handlePress("UP")}
+              style={{
+                height: 64, borderRadius: 12,
+                border: `2px solid ${flashDir === "UP" ? myColor : "rgba(255,255,255,0.15)"}`,
+                background: flashDir === "UP" ? `${myColor}33` : "rgba(255,255,255,0.03)",
+                color: flashDir === "UP" ? myColor : "rgba(255,255,255,0.6)",
+                cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+            </button>
+            <div />
+            {/* Row 2: LEFT, DOWN, RIGHT */}
+            <button
+              onPointerDown={() => handlePress("LEFT")}
+              style={{
+                height: 64, borderRadius: 12,
+                border: `2px solid ${flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.15)"}`,
+                background: flashDir === "LEFT" ? `${myColor}33` : "rgba(255,255,255,0.03)",
+                color: flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.6)",
+                cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <button
+              onPointerDown={() => handlePress("DOWN")}
+              style={{
+                height: 64, borderRadius: 12,
+                border: `2px solid ${flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.15)"}`,
+                background: flashDir === "DOWN" ? `${myColor}33` : "rgba(255,255,255,0.03)",
+                color: flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.6)",
+                cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <button
+              onPointerDown={() => handlePress("RIGHT")}
+              style={{
+                height: 64, borderRadius: 12,
+                border: `2px solid ${flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.15)"}`,
+                background: flashDir === "RIGHT" ? `${myColor}33` : "rgba(255,255,255,0.03)",
+                color: flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.6)",
+                cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+              }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        ) : (
+          /* Single directional button for multiplayer */
+          <button
+            onPointerDown={handlePress}
+            style={{
+              width: "100%",
+              height: 110,
+              borderRadius: 16,
+              border: `3px solid ${myColor}`,
+              background:
+                flashDir === myDir
+                  ? `${myColor}33`
+                  : "rgba(255,255,255,0.03)",
+              color: myColor,
+              fontSize: 48,
+              fontFamily: "'JetBrains Mono', monospace",
+              cursor: "pointer",
+              transition: "background 0.1s",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              userSelect: "none",
+              WebkitTapHighlightColor: "transparent",
+              outline: "none",
+            }}
+          >
+            {mySlot >= 0 ? DIR_LABELS[mySlot] : "?"}
+            <span style={{ fontSize: 16, opacity: 0.5 }}>
+              {mySlot >= 0 ? DIR_NAMES[mySlot] : ""}
+            </span>
+          </button>
+        )}
       </div>
 
       {gameState.gameOver && isHost && (

@@ -1,5 +1,18 @@
 # Changelog — Snake × 4
 
+## v1.5.0 — 2026-03-20
+
+### Single-player: D-pad controls
+Fixed single-player mode so the player can move in all four directions. Previously, the player was locked to one direction (slot 0 = UP only). The single button is now replaced with a D-pad (4 directional buttons in a cross layout) when in single-player mode. Arrow keys on keyboard also now support all four directions in single-player.
+
+### Performance: canvas rendering overhaul
+- **Offscreen grid cache**: the 20×20 grid is pre-rendered once and composited each frame with a single `drawImage` blit, eliminating 42 redundant stroke calls per frame.
+- **Canvas resize fix**: `canvas.width`/`canvas.height` were being reset inside the draw loop every frame (clearing the canvas and triggering browser layout recalculation). Now set once on mount and on window resize only.
+- **Continuous RAF loop**: animation loop now runs continuously and reads game state via refs, instead of restarting every 250ms on React state updates. Eliminates animation jank at tick boundaries.
+- **Device pixel ratio**: canvas now scales to `devicePixelRatio` (2× or 3× on mobile), rendering crisp graphics on retina/OLED screens instead of blurry upscaled pixels.
+
+---
+
 ## v1.4.0 — 2026-03-20
 
 ### Game mode: Single Player
