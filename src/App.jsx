@@ -734,8 +734,9 @@ export default function App() {
     channel.on("broadcast", { event: "direction" }, ({ payload }) => {
       if (!isHostRef.current) return;
       const { dir } = payload;
+      if (!DIRECTIONS.includes(dir)) return; // guard against malformed/serialized payloads
       const cur = gameRef.current.direction;
-      if (dir && OPPOSITES[dir] !== cur) {
+      if (OPPOSITES[dir] !== cur) {
         if (dirQueueRef.current.length < 3) dirQueueRef.current.push(dir);
       }
     });
@@ -1288,7 +1289,7 @@ export default function App() {
         ) : (
           /* Single directional button for multiplayer */
           <button
-            onPointerDown={handlePress}
+            onPointerDown={() => handlePress()}
             style={{
               width: "100%",
               height: 110,

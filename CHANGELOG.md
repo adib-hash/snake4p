@@ -1,5 +1,17 @@
 # Changelog — Snake × 4
 
+## v1.7.1 — 2026-03-20
+
+### Fix: multiplayer game freezing on first button tap
+
+The multiplayer direction button used `onPointerDown={handlePress}` — passing the raw browser `PointerEvent` object as the direction argument. Since a PointerEvent is not `null`, `handlePress` treated it as the direction, pushed it into the direction queue, and when the game tick tried to look up `DIR_VECTORS[PointerEvent]` it got `undefined`. Destructuring `undefined` threw a `TypeError`, killing the tick loop permanently.
+
+Fix: changed to `onPointerDown={() => handlePress()}` so no argument is passed. When `explicitDir` is `undefined`, `handlePress` correctly falls back to `DIRECTIONS[slot]` (the player's assigned direction).
+
+Also added a `DIRECTIONS.includes(dir)` guard in the direction broadcast listener so malformed network payloads (e.g. a serialized PointerEvent arriving as `{}`) are silently dropped instead of crashing the host tick.
+
+---
+
 ## v1.7.0 — 2026-03-20
 
 ### Multiplayer stability & iOS hang fix
