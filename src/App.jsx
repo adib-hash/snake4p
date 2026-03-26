@@ -1290,22 +1290,23 @@ export default function App() {
 
         {isSinglePlayer ? (
           /* D-pad for single player */
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, maxWidth: 280, margin: "0 auto" }}>
             {/* Row 1: empty, UP, empty */}
             <div />
             <button
               onPointerDown={() => handlePress("UP")}
               style={{
-                height: 64, borderRadius: 12,
+                height: 88, borderRadius: 16,
                 border: `2px solid ${flashDir === "UP" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "UP" ? `${myColor}33` : "rgba(255,255,255,0.03)",
                 color: flashDir === "UP" ? myColor : "rgba(255,255,255,0.6)",
                 cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+                touchAction: "none",
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="18 15 12 9 6 15"/>
               </svg>
             </button>
@@ -1314,48 +1315,51 @@ export default function App() {
             <button
               onPointerDown={() => handlePress("LEFT")}
               style={{
-                height: 64, borderRadius: 12,
+                height: 88, borderRadius: 16,
                 border: `2px solid ${flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "LEFT" ? `${myColor}33` : "rgba(255,255,255,0.03)",
                 color: flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.6)",
                 cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+                touchAction: "none",
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="15 18 9 12 15 6"/>
               </svg>
             </button>
             <button
               onPointerDown={() => handlePress("DOWN")}
               style={{
-                height: 64, borderRadius: 12,
+                height: 88, borderRadius: 16,
                 border: `2px solid ${flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "DOWN" ? `${myColor}33` : "rgba(255,255,255,0.03)",
                 color: flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.6)",
                 cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+                touchAction: "none",
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
             </button>
             <button
               onPointerDown={() => handlePress("RIGHT")}
               style={{
-                height: 64, borderRadius: 12,
+                height: 88, borderRadius: 16,
                 border: `2px solid ${flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "RIGHT" ? `${myColor}33` : "rgba(255,255,255,0.03)",
                 color: flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.6)",
                 cursor: "pointer", transition: "background 0.08s, border-color 0.08s",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 userSelect: "none", WebkitTapHighlightColor: "transparent", outline: "none",
+                touchAction: "none",
               }}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
             </button>

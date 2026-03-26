@@ -1,5 +1,20 @@
 # Changelog — Snake × 4
 
+## v2.1.0 — 2026-03-25
+
+### Larger single-player D-pad controls
+
+The four directional buttons in single-player mode were too small and awkward to tap accurately on mobile.
+
+- Button height increased from 64px → 88px
+- Arrow icons enlarged from 22×22 → 32×32
+- Button corners more rounded (12px → 16px radius) for a more tactile feel
+- D-pad grid capped at 280px wide and centered — prevents buttons from stretching absurdly wide on large phones
+- Grid gap increased from 6px → 8px for cleaner separation
+- Added `touchAction: none` on each button — prevents the browser from intercepting touch events as scroll gestures mid-press
+
+---
+
 ## v2.0.0 — 2026-03-20
 
 ### Multiplayer Input Lag Reduction (three compounding optimizations)
