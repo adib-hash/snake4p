@@ -1,5 +1,26 @@
 # Changelog — Snake × 4
 
+## v2.2.0 — 2026-03-25
+
+### Redesigned single-player D-pad layout
+
+Replaced the 3-column cross layout (which wasted two corner cells and kept buttons small) with a full-width controller layout:
+
+```
+[           ↑           ]
+[     ←     ] [     →     ]
+[           ↓           ]
+```
+
+- UP and DOWN are now full-width bars spanning the entire game board width — huge tap targets
+- LEFT and RIGHT fill the middle row side-by-side, each taking half the width
+- Button height: 100px (UP/DOWN) and 110px (LEFT/RIGHT)
+- Arrow icons: 40×40
+- The D-pad now fills the full available width rather than being capped at 280px
+- Overall tap area is roughly 3× larger than before
+
+---
+
 ## v2.1.0 — 2026-03-25
 
 ### Larger single-player D-pad controls
