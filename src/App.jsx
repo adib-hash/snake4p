@@ -1289,13 +1289,14 @@ export default function App() {
         </div>
 
         {isSinglePlayer ? (
-          /* D-pad for single player — full-width layout: UP/DOWN as wide bars, LEFT/RIGHT side-by-side */
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
-            {/* UP — full width */}
+          /* D-pad for single player — 3×3 cross layout: all buttons the same size */
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, width: "100%" }}>
+            {/* Row 1: empty | UP | empty */}
+            <div />
             <button
               onPointerDown={() => handlePress("UP")}
               style={{
-                gridColumn: "1 / -1", height: 100, borderRadius: 18,
+                height: 110, borderRadius: 18,
                 border: `2px solid ${flashDir === "UP" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "UP" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "UP" ? myColor : "rgba(255,255,255,0.7)",
@@ -1309,7 +1310,8 @@ export default function App() {
                 <polyline points="18 15 12 9 6 15"/>
               </svg>
             </button>
-            {/* LEFT */}
+            <div />
+            {/* Row 2: LEFT | empty | RIGHT */}
             <button
               onPointerDown={() => handlePress("LEFT")}
               style={{
@@ -1327,7 +1329,7 @@ export default function App() {
                 <polyline points="15 18 9 12 15 6"/>
               </svg>
             </button>
-            {/* RIGHT */}
+            <div />
             <button
               onPointerDown={() => handlePress("RIGHT")}
               style={{
@@ -1345,11 +1347,12 @@ export default function App() {
                 <polyline points="9 18 15 12 9 6"/>
               </svg>
             </button>
-            {/* DOWN — full width */}
+            {/* Row 3: empty | DOWN | empty */}
+            <div />
             <button
               onPointerDown={() => handlePress("DOWN")}
               style={{
-                gridColumn: "1 / -1", height: 100, borderRadius: 18,
+                height: 110, borderRadius: 18,
                 border: `2px solid ${flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "DOWN" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.7)",
@@ -1363,6 +1366,7 @@ export default function App() {
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
             </button>
+            <div />
           </div>
         ) : (
           /* Single directional button for multiplayer */
