@@ -1211,8 +1211,27 @@ export default function App() {
           maxWidth: GRID * cellSize,
         }}
       >
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
-          {roomCode}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={handleGoHome}
+            title="Quit to Home"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 4,
+              color: "rgba(255,255,255,0.4)",
+              lineHeight: 0,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </button>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+            {roomCode}
+          </div>
         </div>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: "#4ECDC4" }}>
