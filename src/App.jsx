@@ -640,7 +640,7 @@ export default function App() {
   useEffect(() => {
     function resize() {
       const maxW = Math.min(window.innerWidth - 20, 540);
-      const maxH = window.innerHeight * 0.55;
+      const maxH = window.innerHeight * 0.45;
       setCellSize(Math.floor(Math.min(maxW, maxH) / GRID));
     }
     resize();
@@ -1313,7 +1313,7 @@ export default function App() {
             <button
               onPointerDown={() => handlePress("UP")}
               style={{
-                height: 110, borderRadius: 18,
+                height: 80, borderRadius: 18,
                 border: `2px solid ${flashDir === "UP" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "UP" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "UP" ? myColor : "rgba(255,255,255,0.7)",
@@ -1332,7 +1332,7 @@ export default function App() {
             <button
               onPointerDown={() => handlePress("LEFT")}
               style={{
-                height: 110, borderRadius: 18,
+                height: 80, borderRadius: 18,
                 border: `2px solid ${flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "LEFT" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "LEFT" ? myColor : "rgba(255,255,255,0.7)",
@@ -1350,7 +1350,7 @@ export default function App() {
             <button
               onPointerDown={() => handlePress("RIGHT")}
               style={{
-                height: 110, borderRadius: 18,
+                height: 80, borderRadius: 18,
                 border: `2px solid ${flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "RIGHT" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "RIGHT" ? myColor : "rgba(255,255,255,0.7)",
@@ -1369,7 +1369,7 @@ export default function App() {
             <button
               onPointerDown={() => handlePress("DOWN")}
               style={{
-                height: 110, borderRadius: 18,
+                height: 80, borderRadius: 18,
                 border: `2px solid ${flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.15)"}`,
                 background: flashDir === "DOWN" ? `${myColor}33` : "rgba(255,255,255,0.05)",
                 color: flashDir === "DOWN" ? myColor : "rgba(255,255,255,0.7)",
